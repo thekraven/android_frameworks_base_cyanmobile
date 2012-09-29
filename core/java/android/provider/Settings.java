@@ -3928,12 +3928,6 @@ public final class Settings {
         public static final String ELECTRON_BEAM_ANIMATION_ON = "electron_beam_animation_on";
 
         /** 
-        * Screen-on animation delay
-        * @hide
-        */
-        public static final String ELECTRON_BEAM_ANIMATION_ON_DELAY = "electron_beam_animation_on_delay";
-
-        /** 
         * Enables the Screen-off animation
         * @hide
         */
