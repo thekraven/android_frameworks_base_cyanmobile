@@ -63,7 +63,6 @@ import android.util.Slog;
 import android.view.WindowManagerPolicy;
 import static android.provider.Settings.System.DIM_SCREEN;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON;
-import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON_DELAY;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_OFF;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE;
@@ -323,9 +322,7 @@ class PowerManagerService extends IPowerManager.Stub
     
     private native void nativeInit();
     private native void nativeSetPowerState(boolean screenOn, boolean screenBright);
-    private native void nativeStartSurfaceFlingerOffAnimation(int mode);
-    private native void nativeStartSurfaceFlingerOnAnimation(int mode);
-
+    private native void nativeStartSurfaceFlingerAnimation(int mode);
     /*
     static PrintStream mLog;
     static {
@@ -534,14 +531,14 @@ class PowerManagerService extends IPowerManager.Stub
 
                 if (mContext.getResources().getBoolean(
                            com.android.internal.R.bool.config_enableScreenAnimation)) {
-                    mElectronBeamAnimationOn = (Settings.System.getInt(mContext.getContentResolver(),
-                                ELECTRON_BEAM_ANIMATION_ON, 0) != 0) &&
+                    mElectronBeamAnimationOn = Settings.System.getInt(mContext.getContentResolver(),
+                                ELECTRON_BEAM_ANIMATION_ON,
                                 mContext.getResources().getBoolean(
-                                        com.android.internal.R.bool.config_enableScreenOnAnimation);
-                    mElectronBeamAnimationOff = (Settings.System.getInt(mContext.getContentResolver(),
-                                ELECTRON_BEAM_ANIMATION_OFF, 1) != 0) &&
+                                        com.android.internal.R.bool.config_enableScreenOnAnimation) ? 1 : 0) == 1;
+                    mElectronBeamAnimationOff = Settings.System.getInt(mContext.getContentResolver(),
+                                ELECTRON_BEAM_ANIMATION_OFF,
                                 mContext.getResources().getBoolean(
-                                        com.android.internal.R.bool.config_enableScreenOffAnimation);
+                                        com.android.internal.R.bool.config_enableScreenOffAnimation) ? 1 : 0) == 1;
                 }
 
                 mAnimationSetting = 0;
@@ -662,9 +659,9 @@ class PowerManagerService extends IPowerManager.Stub
                                 PowerManager.PARTIAL_WAKE_LOCK, "Proximity Partial", false);
 
         mScreenOnIntent = new Intent(Intent.ACTION_SCREEN_ON);
-        //mScreenOnIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        mScreenOnIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
         mScreenOffIntent = new Intent(Intent.ACTION_SCREEN_OFF);
-        //mScreenOffIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        mScreenOffIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
 
         Resources resources = mContext.getResources();
 
@@ -2217,8 +2214,6 @@ class PowerManagerService extends IPowerManager.Stub
         float curValue;
         float delta;
         boolean animating;
-        Handler mElectronBeamOnHandler;
-        HandlerThread mElectronBeamOnHandlerThread;
 
         BrightnessState(int m) {
             mask = m;
@@ -2324,73 +2319,32 @@ class PowerManagerService extends IPowerManager.Stub
         }
 
         public void run() {
-            synchronized (mLocks) {
-                final boolean turningOn = animating && (int)curValue == Power.BRIGHTNESS_OFF;
-                final boolean turningOff = animating && targetValue == Power.BRIGHTNESS_OFF;
-                // Check for the electron beam for fully on/off transitions.
-                // Otherwise, allow it to fade the brightness as normal.
-                final boolean electrifying =
-                        ((mElectronBeamAnimationOff && turningOff) ||
-                         (mElectronBeamAnimationOn && turningOn));
-                if (!electrifying && (mAnimateScreenLights || !turningOff)) {
+            // Check for the electron beam for fully on/off transitions.
+            // Otherwise, allow it to fade the brightness as normal.
+            final boolean electrifying = animating &&
+                ((mElectronBeamAnimationOff && targetValue == Power.BRIGHTNESS_OFF) ||
+                 (mElectronBeamAnimationOn && (int)curValue == Power.BRIGHTNESS_OFF));
+
+            if (mAnimateScreenLights && !electrifying) {
+                synchronized (mLocks) {
                     long now = SystemClock.uptimeMillis();
                     boolean more = mScreenBrightness.stepLocked();
                     if (more) {
                         mScreenOffHandler.postAtTime(this, now+(1000/60));
                     }
-                } else {
-                    // It's pretty scary to hold mLocks for this long, and we should
-                    // redesign this, but it works for now.
-                    if (turningOff) {
-                        if (electrifying) {
-                            nativeStartSurfaceFlingerOffAnimation(
-                                    mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR
-                                    ? 0 : mAnimationSetting);
-                        }
-                        mScreenBrightness.jumpToTargetLocked();
-                    } else if (turningOn) {
-                        if (electrifying) {
-                            int delay = 100;
-                            if(delay>0) {
-                                startElectronBeamDelayed(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        startElectronBeamOnAnimation();
-                                        synchronized(mElectronBeamOnHandler) {
-                                            mElectronBeamOnHandler.notifyAll();
-                                        }
-                                    }
-                                },mElectronBeamAnimationOnDelay);
-                            } else {
-                                startElectronBeamOnAnimation();
-                            }
-                        } else {
-                            mScreenBrightness.jumpToTargetLocked();
-                        }
+
+                }
+            } else {
+                synchronized (mLocks) {
+                    if (electrifying) {
+                        // It's pretty scary to hold mLocks for this long, and we should
+                        // redesign this, but it works for now.
+                        nativeStartSurfaceFlingerAnimation(
+                                mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR
+                                ? 0 : mAnimationSetting);
                     }
+                    mScreenBrightness.jumpToTargetLocked();
                 }
-            }
-        }
-
-        private void startElectronBeamOnAnimation() {
-            jumpToTarget();
-            nativeStartSurfaceFlingerOnAnimation(mAnimationSetting);
-            mScreenBrightness.animating = false;
-        }
-
-        private void startElectronBeamDelayed(Runnable animation, int delay) {
-            mElectronBeamOnHandlerThread = new HandlerThread("PowerManagerService.mScreenBrightness.mElectronBeamOnHandlerThread");
-            mElectronBeamOnHandlerThread.start();
-            mElectronBeamOnHandler = new Handler(mElectronBeamOnHandlerThread.getLooper());
-            mElectronBeamOnHandler.postDelayed(animation,delay);
-            try {
-                synchronized(mElectronBeamOnHandler) {
-                    mElectronBeamOnHandler.wait();
-                }
-            } catch (InterruptedException e) {
-                Slog.d(TAG,"mElectronBeamOnHandler.wait() interrupted");
-                Slog.d(TAG,Log.getStackTraceString(e));
-                e.printStackTrace();
             }
         }
     }
@@ -2577,9 +2531,9 @@ class PowerManagerService extends IPowerManager.Stub
             }
             // ignore if the caller doesn't want this to allow the screen to turn
             // on, and the screen is currently off.
-            if (ignoreIfScreenOff && (mPowerState & SCREEN_ON_BIT) == 0) {
-                return;
-            }
+//            if (ignoreIfScreenOff && (mPowerState & SCREEN_ON_BIT) == 0) {
+ //               return;
+//            }
             // Disable proximity sensor if if user presses power key while we are in the
             // "waiting for proximity sensor to go negative" state.
             if (mProximitySensorActive && mProximityWakeLockCount == 0) {
