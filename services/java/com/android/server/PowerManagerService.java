@@ -161,7 +161,6 @@ class PowerManagerService extends IPowerManager.Stub
     //electron beam animation control
     boolean mElectronBeamAnimationOn = false;
     boolean mElectronBeamAnimationOff = false;
-    //int mElectronBeamAnimationOnDelay = 100;
 
     static final int ANIM_STEPS = 60/4;
     // Slower animation for autobrightness changes
@@ -539,7 +538,7 @@ class PowerManagerService extends IPowerManager.Stub
                     mElectronBeamAnimationOff = Settings.System.getInt(mContext.getContentResolver(),
                                 ELECTRON_BEAM_ANIMATION_OFF,
                                 mContext.getResources().getBoolean(
-                                        com.android.internal.R.bool.config_enableScreenOffAnimation) ? 1 : 0) == 1;
+                                        com.android.internal.R.bool.config_enableScreenOffAnimation);
                 }
 
                 mAnimationSetting = 0;
