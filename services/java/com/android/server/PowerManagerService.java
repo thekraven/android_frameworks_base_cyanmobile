@@ -2531,9 +2531,9 @@ class PowerManagerService extends IPowerManager.Stub
             }
             // ignore if the caller doesn't want this to allow the screen to turn
             // on, and the screen is currently off.
-//            if (ignoreIfScreenOff && (mPowerState & SCREEN_ON_BIT) == 0) {
- //               return;
-//            }
+            if (ignoreIfScreenOff && (mPowerState & SCREEN_ON_BIT) == 0) {
+                return;
+            }
             // Disable proximity sensor if if user presses power key while we are in the
             // "waiting for proximity sensor to go negative" state.
             if (mProximitySensorActive && mProximityWakeLockCount == 0) {
