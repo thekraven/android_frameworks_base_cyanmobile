@@ -580,8 +580,6 @@ public abstract class SMSDispatcher extends Handler {
      *         to applications
      */
     protected int processMessagePart(SmsMessageBase sms,
-
-
             SmsHeader.ConcatRef concatRef, SmsHeader.PortAddrs portAddrs) {
 
         // Lookup all other related parts
@@ -622,6 +620,7 @@ public abstract class SMSDispatcher extends Handler {
                         cursor.getString(pduColumn));
             }
             // This one isn't in the DB, so add it
+            pdus[concatRef.seqNumber - 1] = sms.getPdu();
             // Remove the parts from the database
             mResolver.delete(mRawUri, where.toString(), whereArgs);
         } catch (SQLException e) {
