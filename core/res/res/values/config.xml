@@ -587,7 +587,7 @@
 
     <!-- If this value is true, The mms content-disposition field is supported correctly.
          If false, Content-disposition fragments are ignored -->
-    <bool name="config_mms_content_disposition_support">true</bool>
+    <bool name="config_mms_content_disposition_support">false</bool>
 
     <!-- If this value is true, the carrier supports sms delivery reports.
          If false, sms delivery reports are not supported and the preference

@@ -617,11 +617,20 @@ public abstract class SMSDispatcher extends Handler {
             for (int i = 0; i < cursorCount; i++) {
                 cursor.moveToNext();
                 int cursorSequence = (int)cursor.getLong(sequenceColumn);
-                pdus[cursorSequence - 1] = HexDump.hexStringToByteArray(
+                // GSM sequence numbers start at 1; CDMA WDP datagram sequence numbers start at 0 
+                if (!isCdmaWapPush) { 
+                    cursorSequence--; 
+                } 
+                pdus[cursorSequence] = HexDump.hexStringToByteArray( 
                         cursor.getString(pduColumn));
             }
             // This one isn't in the DB, so add it
-            pdus[concatRef.seqNumber - 1] = sms.getPdu();
+            // GSM sequence numbers start at 1; CDMA WDP datagram sequence numbers start at 0 
+            if (isCdmaWapPush) { 
+                pdus[sequenceNumber] = pdu; 
+            } else { 
+                pdus[sequenceNumber - 1] = pdu; 
+            } 
 
             // Remove the parts from the database
             mResolver.delete(mRawUri, where.toString(), whereArgs);
