@@ -580,6 +580,8 @@ public abstract class SMSDispatcher extends Handler {
      *         to applications
      */
     protected int processMessagePart(SmsMessageBase sms,
+
+
             SmsHeader.ConcatRef concatRef, SmsHeader.PortAddrs portAddrs) {
 
         // Lookup all other related parts
@@ -587,7 +589,6 @@ public abstract class SMSDispatcher extends Handler {
         where.append(concatRef.refNumber);
         where.append(" AND address = ?");
         String[] whereArgs = new String[] {sms.getOriginatingAddress()};
-
         byte[][] pdus = null;
         Cursor cursor = null;
         try {
@@ -617,21 +618,10 @@ public abstract class SMSDispatcher extends Handler {
             for (int i = 0; i < cursorCount; i++) {
                 cursor.moveToNext();
                 int cursorSequence = (int)cursor.getLong(sequenceColumn);
-                // GSM sequence numbers start at 1; CDMA WDP datagram sequence numbers start at 0 
-                if (!isCdmaWapPush) { 
-                    cursorSequence--; 
-                } 
-                pdus[cursorSequence] = HexDump.hexStringToByteArray( 
+                pdus[cursorSequence - 1] = HexDump.hexStringToByteArray(
                         cursor.getString(pduColumn));
             }
             // This one isn't in the DB, so add it
-            // GSM sequence numbers start at 1; CDMA WDP datagram sequence numbers start at 0 
-            if (isCdmaWapPush) { 
-                pdus[sequenceNumber] = pdu; 
-            } else { 
-                pdus[sequenceNumber - 1] = pdu; 
-            } 
-
             // Remove the parts from the database
             mResolver.delete(mRawUri, where.toString(), whereArgs);
         } catch (SQLException e) {
