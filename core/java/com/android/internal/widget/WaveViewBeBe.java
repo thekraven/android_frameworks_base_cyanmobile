@@ -99,7 +99,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
          * isnt officially supported, but this should do for most cases
          */
         if (densityDpi <= 240 && densityDpi >= 200) {
-            mRingRadius = 800.0f;
+            mRingRadius = 960.0f;
         } else if (densityDpi < 200 && densityDpi >= 160) {
             mRingRadius = 480.0f;
         } else if (densityDpi < 160 && densityDpi >= 120) {
@@ -314,7 +314,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 if (DBG) Log.v(TAG, "State UNLOCK_ATTEMPT");
                 if (mouseY < mLockCenterY - 55) {
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 800, true);
+                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 960, true);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleX", 2.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
