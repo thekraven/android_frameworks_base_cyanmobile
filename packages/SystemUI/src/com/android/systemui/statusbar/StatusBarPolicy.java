@@ -741,6 +741,13 @@ public class StatusBarPolicy {
         mService.setIcon("phone_signal", mPhoneSignalIconId, 0);
         mAlwaysUseCdmaRssi = mContext.getResources().getBoolean(
             com.android.internal.R.bool.config_alwaysUseCdmaRssi);
+			
+        try { 
+            mPhoneSignalHidden = mContext.getResources().getBoolean( 
+                R.bool.config_statusbar_hide_phone_signal); 
+        } catch (Exception e) { 
+            mPhoneSignalHidden = false; 
+        } 
 
         mPhoneSignalHidden = (Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 4);
@@ -1487,13 +1494,13 @@ public class StatusBarPolicy {
                 updateSignalStrengthDbm(PHONE_SIGNAL_IS_AIRPLANE_MODE);
                 // show the icon depening on mPhoneSignalHidden (and regardless of
                 // the value of CmShowCmSignal)
-                isVisible = mPhoneSignalHidden;
+				isVisible = !mPhoneSignalHidden;
             } else {
                 mPhoneSignalIconId = R.drawable.stat_sys_signal_null;
                 updateSignalStrengthDbm(PHONE_SIGNAL_IS_NULL);
                 // set phone_signal visibility false if hidden
                 // and hide it if CmSignalText is used
-                isVisible = mPhoneSignalHidden && !mShowCmSignal;
+				isVisible = !mPhoneSignalHidden && !mShowCmSignal;
             }
             mService.setIcon("phone_signal", mPhoneSignalIconId, 0);
             mService.setIconVisibility("phone_signal", isVisible);
