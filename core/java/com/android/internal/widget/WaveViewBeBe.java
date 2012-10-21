@@ -99,7 +99,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
          * isnt officially supported, but this should do for most cases
          */
         if (densityDpi <= 240 && densityDpi >= 200) {
-            mRingRadius = 960.0f;
+            mRingRadius = 800.0f;
         } else if (densityDpi < 200 && densityDpi >= 160) {
             mRingRadius = 480.0f;
         } else if (densityDpi < 160 && densityDpi >= 120) {
@@ -172,7 +172,6 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
         mUnlockWave.setScaleY(1.0f);
         mUnlockWave.setAlpha(1.0f);
         mDrawables.add(mUnlockWave);
-	
 
         mUnlockDefault = new DrawableHolder(createDrawable(R.drawable.unlockbebe_default));
         mUnlockDefault.setX(mLockCenterX);
@@ -246,7 +245,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 mUnlockHalo.setScaleY(1.0f);
                 // mUnlockHalo.setAlpha(1.0f);
                 mUnlockHalo.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
-                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 540, true);
+                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 480, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 320, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "alpha", 0.0f, true);
 
@@ -315,13 +314,13 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 if (DBG) Log.v(TAG, "State UNLOCK_ATTEMPT");
                 if (mouseY < mLockCenterY - 55) {
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 960, true);
+                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 800, true);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleX", 2.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
 
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 540, true);
+                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 480, true);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleX", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);

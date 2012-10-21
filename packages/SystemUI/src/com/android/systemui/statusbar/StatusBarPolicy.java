@@ -648,6 +648,9 @@ public class StatusBarPolicy {
 
     private boolean mStatusBarBattery;
 
+    // phone_signal visibility
+    private boolean mPhoneSignalHidden;
+
     // need another var that superceding mPhoneSignalHidden
     private boolean mShowCmSignal;
 
@@ -713,8 +716,6 @@ public class StatusBarPolicy {
         }
     }
 
-    // phone_signal visibility
-    private boolean mPhoneSignalHidden;
     public StatusBarPolicy(Context context) {
         mContext = context;
         mService = (StatusBarManager)context.getSystemService(Context.STATUS_BAR_SERVICE);
@@ -741,19 +742,11 @@ public class StatusBarPolicy {
         mAlwaysUseCdmaRssi = mContext.getResources().getBoolean(
             com.android.internal.R.bool.config_alwaysUseCdmaRssi);
 
+        mPhoneSignalHidden = (Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 4);
 
-        // load config to determine if phone should be hidden
-        try {
-            mPhoneSignalHidden = mContext.getResources().getBoolean(
-                R.bool.config_statusbar_hide_phone_signal);
-        } catch (Exception e) {
-            mPhoneSignalHidden = false;
-        }
-        //mPhoneSignalHidden = (Settings.System.getInt(mContext.getContentResolver(),
-        //        Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 4);
-
-        //mShowCmSignal = (Settings.System.getInt(mContext.getContentResolver(),
-        //        Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 0);
+        mShowCmSignal = (Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 0);
 
         // hide phone_signal icon if hidden
         mService.setIconVisibility("phone_signal", !mPhoneSignalHidden && !mShowCmSignal);
@@ -1494,13 +1487,13 @@ public class StatusBarPolicy {
                 updateSignalStrengthDbm(PHONE_SIGNAL_IS_AIRPLANE_MODE);
                 // show the icon depening on mPhoneSignalHidden (and regardless of
                 // the value of CmShowCmSignal)
-                isVisible = !mPhoneSignalHidden;
+                isVisible = mPhoneSignalHidden;
             } else {
                 mPhoneSignalIconId = R.drawable.stat_sys_signal_null;
                 updateSignalStrengthDbm(PHONE_SIGNAL_IS_NULL);
                 // set phone_signal visibility false if hidden
                 // and hide it if CmSignalText is used
-                isVisible = !mPhoneSignalHidden && !mShowCmSignal;
+                isVisible = mPhoneSignalHidden && !mShowCmSignal;
             }
             mService.setIcon("phone_signal", mPhoneSignalIconId, 0);
             mService.setIconVisibility("phone_signal", isVisible);
