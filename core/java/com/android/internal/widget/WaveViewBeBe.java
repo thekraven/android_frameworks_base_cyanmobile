@@ -183,7 +183,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
         mUnlockHalo = new DrawableHolder(createDrawable(R.drawable.unlockbebe_halo));
         mUnlockHalo.setX(mLockCenterX);
-        mUnlockHalo.setY(mLockCenterY + 540);
+        mUnlockHalo.setY(mLockCenterY + 480);
         mUnlockHalo.setScaleX(2.0f);
         mUnlockHalo.setScaleY(1.0f);
         mUnlockHalo.setAlpha(0.0f);
@@ -243,7 +243,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 mUnlockHalo.removeAnimationFor("alpha");
                 mUnlockHalo.setScaleX(2.0f);
                 mUnlockHalo.setScaleY(1.0f);
-                // mUnlockHalo.setAlpha(1.0f);
+                //mUnlockHalo.setAlpha(1.0f);
                 mUnlockHalo.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
                 mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 652, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 480, true);
@@ -266,7 +266,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
             case STATE_ATTEMPTING:
                 if (DBG) Log.v(TAG, "State ATTEMPTING (fingerDown = " + fingerDown + ")");
-                if (mouseY < mLockCenterY - 55) {
+                if (mouseY < mLockCenterY - 120) {
                     if (fingerDown) {
                         mUnlockWave.addAnimTo(0, 0, "x", mLockCenterX, true);
                         mUnlockWave.addAnimTo(0, 0, "y", mouseY - 480, true);
@@ -284,7 +284,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                         mUnlockHalo.addAnimTo(0, 0, "y", mouseY, true);
                         mUnlockHalo.addAnimTo(0, 0, "scaleX", 2.0f, true);
                         mUnlockHalo.addAnimTo(0, 0, "scaleY", 1.0f, true);
-                        mUnlockHalo.addAnimTo(0, 0, "alpha", 1.0f, true);
+                        mUnlockHalo.addAnimTo(0, 0, "alpha", 0.7f, true);
                     }  else {
                         if (DBG) Log.v(TAG, "up detected, moving to STATE_UNLOCK_ATTEMPT");
                         mLockState = STATE_UNLOCK_ATTEMPT;
@@ -306,7 +306,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     mUnlockHalo.addAnimTo(0, 0, "y", mouseY, true);
                     mUnlockHalo.addAnimTo(0, 0, "scaleX", 2.0f, true);
                     mUnlockHalo.addAnimTo(0, 0, "scaleY", 1.0f, true);
-                    mUnlockHalo.addAnimTo(0, 0, "alpha", 1.0f, true);
+                    mUnlockHalo.addAnimTo(0, 0, "alpha", 0.7f, true);
                 }
                 break;
 
@@ -317,7 +317,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 960, true);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleX", 2.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
-                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
+                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 0.8f, false);
 
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 480, true);
