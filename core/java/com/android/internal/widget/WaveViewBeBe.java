@@ -64,7 +64,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
     private OnTriggerListener mOnTriggerListener;
     private ArrayList<DrawableHolder> mDrawables = new ArrayList<DrawableHolder>(4);
     private boolean mFingerDown = false;
-    private float mRingRadius; // Radius of bitmap ring. Used to snap halo to it
+    private float mRingRadius = 960; // Radius of bitmap ring. Used to snap halo to it
     private int mSnapRadius = 200; // minimum threshold for drag unlock
     private float mLockCenterX; // center of widget as dictated by widget size
     private float mLockCenterY;
@@ -183,7 +183,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
         mUnlockHalo = new DrawableHolder(createDrawable(R.drawable.unlockbebe_halo));
         mUnlockHalo.setX(mLockCenterX);
-        mUnlockHalo.setY(mLockCenterY + 120);
+        mUnlockHalo.setY(mLockCenterY + 540);
         mUnlockHalo.setScaleX(2.0f);
         mUnlockHalo.setScaleY(1.0f);
         mUnlockHalo.setAlpha(0.0f);
@@ -245,8 +245,8 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 mUnlockHalo.setScaleY(1.0f);
                 // mUnlockHalo.setAlpha(1.0f);
                 mUnlockHalo.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
-                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 480, true);
-                mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 320, true);
+                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 652, true);
+                mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 480, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "alpha", 0.0f, true);
 
                 removeCallbacks(mLockTimerActions);

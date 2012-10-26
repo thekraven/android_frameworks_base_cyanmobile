@@ -363,7 +363,7 @@ class HoneycombLockscreen extends LinearLayout implements KeyguardScreen,
         }
     }
 
-    private static final int WAIT_FOR_ANIMATION_TIMEOUT = 500;
+    private static final int WAIT_FOR_ANIMATION_TIMEOUT = 250;
     private static final int STAY_ON_WHILE_GRABBED_TIMEOUT = 20000;
 
     class WaveViewMethods implements WaveView.OnTriggerListener {
