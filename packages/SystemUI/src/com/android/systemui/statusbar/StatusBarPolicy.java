@@ -648,9 +648,6 @@ public class StatusBarPolicy {
 
     private boolean mStatusBarBattery;
 
-    // phone_signal visibility
-    private boolean mPhoneSignalHidden;
-
     // need another var that superceding mPhoneSignalHidden
     private boolean mShowCmSignal;
 
@@ -716,6 +713,8 @@ public class StatusBarPolicy {
         }
     }
 
+    // phone_signal visibility
+    private boolean mPhoneSignalHidden;
     public StatusBarPolicy(Context context) {
         mContext = context;
         mService = (StatusBarManager)context.getSystemService(Context.STATUS_BAR_SERVICE);
@@ -749,11 +748,11 @@ public class StatusBarPolicy {
             mPhoneSignalHidden = false; 
         } 
 
-        mPhoneSignalHidden = (Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 4);
+//        mPhoneSignalHidden = (Settings.System.getInt(mContext.getContentResolver(),
+//                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 4);
 
-        mShowCmSignal = (Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 0);
+//        mShowCmSignal = (Settings.System.getInt(mContext.getContentResolver(),
+//                Settings.System.STATUS_BAR_CM_SIGNAL_TEXT, 0) != 0);
 
         // hide phone_signal icon if hidden
         mService.setIconVisibility("phone_signal", !mPhoneSignalHidden && !mShowCmSignal);
