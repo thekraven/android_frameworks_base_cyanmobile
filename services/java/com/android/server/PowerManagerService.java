@@ -65,6 +65,7 @@ import android.view.WindowManagerPolicy;
 import static android.view.WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR;
 import static android.provider.Settings.System.DIM_SCREEN;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON;
+import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON_DELAY;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_OFF;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE;
@@ -250,6 +251,7 @@ class PowerManagerService extends IPowerManager.Stub
     private UnsynchronizedWakeLock mPreventScreenOnPartialLock;
     private UnsynchronizedWakeLock mProximityPartialLock;
     private HandlerThread mHandlerThread;
+
     private HandlerThread mScreenOffThread;
     private Handler mScreenOffHandler;
     private Handler mScreenBrightnessHandler;
@@ -586,10 +588,11 @@ class PowerManagerService extends IPowerManager.Stub
                 }
 
                 mAnimationSetting = 0;
-                if (mElectronBeamAnimationOff) {
+                if (mElectronBeamAnimationOff && (mWindowScaleAnimation > 0.5f)) {
                     mAnimationSetting |= ANIM_SETTING_OFF;
                 }
-                if (mElectronBeamAnimationOn) {
+                if (mElectronBeamAnimationOn && (transitionScale > 0.5f)) {
+                    // Uncomment this if you want the screen-on animation.
                     mAnimationSetting |= ANIM_SETTING_ON;
                 }
             }
@@ -630,28 +633,18 @@ class PowerManagerService extends IPowerManager.Stub
         mCapsLight = lights.getLight(LightsService.LIGHT_ID_CAPS);
         mFnLight = lights.getLight(LightsService.LIGHT_ID_FUNC);
 
-        nativeInit();
-        synchronized (mLocks) {
-            updateNativePowerStateLocked();
-        }
+
 
         mInitComplete = false;
-        mScreenOffThread = new HandlerThread("PowerManagerService.mScreenOffThread") {
-            @Override
-            protected void onLooperPrepared() {
-                mScreenOffHandler = new Handler();
-                synchronized (mScreenOffThread) {
-                    mInitComplete = true;
-                    mScreenOffThread.notifyAll();
-                }
-            }
-        };
-        mScreenOffThread.start();
+        mScreenBrightnessAnimator = new ScreenBrightnessAnimator("mScreenBrightnessUpdaterThread",
+                Process.THREAD_PRIORITY_DISPLAY);
+        mScreenBrightnessAnimator.start();
 
-        synchronized (mScreenOffThread) {
+        synchronized (mScreenBrightnessAnimator) {
             while (!mInitComplete) {
                 try {
-                    mScreenOffThread.wait();
+
+                    mScreenBrightnessAnimator.wait();
                 } catch (InterruptedException e) {
                     // Ignore
                 }
@@ -703,9 +696,9 @@ class PowerManagerService extends IPowerManager.Stub
                                 PowerManager.PARTIAL_WAKE_LOCK, "Proximity Partial", false);
 
         mScreenOnIntent = new Intent(Intent.ACTION_SCREEN_ON);
-        mScreenOnIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        //mScreenOnIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
         mScreenOffIntent = new Intent(Intent.ACTION_SCREEN_OFF);
-        mScreenOffIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        //mScreenOffIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
 
         Resources resources = mContext.getResources();
 
@@ -1986,6 +1979,7 @@ class PowerManagerService extends IPowerManager.Stub
                         }
                         mPowerState |= SCREEN_ON_BIT;
                     }
+
                 } else {
                     // Update the lights *before* taking care of turning the
                     // screen off, so we can initiate any animations that are desired.
@@ -2264,6 +2258,12 @@ class PowerManagerService extends IPowerManager.Stub
         private long startTimeMillis;
         private final String prefix;
 
+
+
+
+
+
+
         public ScreenBrightnessAnimator(String name, int priority) {
             super(name, priority);
             prefix = name;
@@ -2410,10 +2410,36 @@ class PowerManagerService extends IPowerManager.Stub
             animateTo(target, mHighestLightSensorValue, mask, animationDuration);
         }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         public void animateTo(int target, int sensorTarget, int mask, int animationDuration) {
-            final boolean electrifying = animating &&
-                ((mElectronBeamAnimationOff && targetValue == Power.BRIGHTNESS_OFF) ||
-                 (mElectronBeamAnimationOn && (int)curValue == Power.BRIGHTNESS_OFF));
 
             synchronized(this) {
                 if ((mask & SCREEN_BRIGHT_BIT) == 0) {
@@ -2421,17 +2447,21 @@ class PowerManagerService extends IPowerManager.Stub
                     if ((mask & BUTTON_BRIGHT_BIT) != 0) {
                         mButtonLight.setBrightness(target);
                     }
-                } else {
-                    // It's pretty scary to hold mLocks for this long, and we should
-                    // redesign this, but it works for now.
-                    if (turningOff) {
-                        if (electrifying) {
-                            nativeStartSurfaceFlingerOffAnimation(
-                                    mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR
-                                    ? 0 : mAnimationSetting);
-                        }
-                        mScreenBrightness.jumpToTargetLocked();
-                    } 
+                    if ((mask & KEYBOARD_BRIGHT_BIT) != 0) {
+                        mKeyboardLight.setBrightness(target);
+                    }
+                    return;
+                }
+                if (isAnimating() && (mask ^ currentMask) != 0) {
+                    // current animation is unrelated to new animation, jump to final values
+                    cancelAnimation();
+                }
+                if (mInitialAnimation) {
+                    // jump to final value in one step the first time the brightness is set
+                    animationDuration = 0;
+                    if (target > 0) {
+                        mInitialAnimation = false;
+                    }
                 }
                 startValue = currentValue;
                 endValue = target;
