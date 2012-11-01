@@ -65,7 +65,6 @@ import android.view.WindowManagerPolicy;
 import static android.view.WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR;
 import static android.provider.Settings.System.DIM_SCREEN;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON;
-import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_ON_DELAY;
 import static android.provider.Settings.System.ELECTRON_BEAM_ANIMATION_OFF;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS;
 import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE;
@@ -2406,20 +2405,34 @@ class PowerManagerService extends IPowerManager.Stub
                     if ((mask & BUTTON_BRIGHT_BIT) != 0) {
                         mButtonLight.setBrightness(target);
                     }
-                    if ((mask & KEYBOARD_BRIGHT_BIT) != 0) {
-                        mKeyboardLight.setBrightness(target);
-                    }
-                    return;
-                }
-                if (isAnimating() && (mask ^ currentMask) != 0) {
-                    // current animation is unrelated to new animation, jump to final values
-                    cancelAnimation();
-                }
-                if (mInitialAnimation) {
-                    // jump to final value in one step the first time the brightness is set
-                    animationDuration = 0;
-                    if (target > 0) {
-                        mInitialAnimation = false;
+                } else {
+                    // It's pretty scary to hold mLocks for this long, and we should
+                    // redesign this, but it works for now.
+                    if (turningOff) {
+                        if (electrifying) {
+                            nativeStartSurfaceFlingerOffAnimation(
+                                    mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR
+                                    ? 0 : mAnimationSetting);
+                        }
+                        mScreenBrightness.jumpToTargetLocked();
+                    } else if (turningOn) {
+                        if (electrifying) {
+                            if(mElectronBeamAnimationOnDelay>0) {
+                                startElectronBeamDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        startElectronBeamOnAnimation();
+                                        synchronized(mElectronBeamOnHandler) {
+                                            mElectronBeamOnHandler.notifyAll();
+                                        }
+                                    }
+                                },delay);
+                            } else {
+                                startElectronBeamOnAnimation();
+                            }
+                        } else {
+                            mScreenBrightness.jumpToTargetLocked();
+                        }
                     }
                 }
                 startValue = currentValue;
