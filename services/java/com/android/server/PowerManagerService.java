@@ -538,7 +538,7 @@ class PowerManagerService extends IPowerManager.Stub
                     mElectronBeamAnimationOff = Settings.System.getInt(mContext.getContentResolver(),
                                 ELECTRON_BEAM_ANIMATION_OFF,
                                 mContext.getResources().getBoolean(
-                                        com.android.internal.R.bool.config_enableScreenOffAnimation);
+                                        com.android.internal.R.bool.config_enableScreenOffAnimation) ? 1 : 0) == 1;
                 }
 
                 mAnimationSetting = 0;
@@ -546,7 +546,7 @@ class PowerManagerService extends IPowerManager.Stub
                     mAnimationSetting |= ANIM_SETTING_OFF;
                 }
                 if (mElectronBeamAnimationOn) {
-                    mAnimationSetting |= ANIM_SETTING_ON;
+                 //   mAnimationSetting |= ANIM_SETTING_ON;
                 }
             }
         }
