@@ -245,7 +245,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 mUnlockHalo.setScaleY(1.0f);
                 // mUnlockHalo.setAlpha(1.0f);
                 mUnlockHalo.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
-                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 330, true);
+                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 350, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 240, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "alpha", 0.0f, true);
 
@@ -269,7 +269,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 if (mouseY < mLockCenterY - 35) {
                     if (fingerDown) {
                         mUnlockWave.addAnimTo(0, 0, "x", mLockCenterX, true);
-                        mUnlockWave.addAnimTo(0, 0, "y", mouseY - 330, true);
+                        mUnlockWave.addAnimTo(0, 0, "y", mouseY - 350, true);
                         mUnlockWave.addAnimTo(0, 0, "scaleX", 1.0f, true);
                         mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
                         mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
@@ -291,7 +291,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     }
                 } else {
                     mUnlockWave.addAnimTo(0, 0, "x", mLockCenterX, true);
-                    mUnlockWave.addAnimTo(0, 0, "y", mouseY - 330 , true);
+                    mUnlockWave.addAnimTo(0, 0, "y", mouseY - 350 , true);
                     mUnlockWave.addAnimTo(0, 0, "scaleX", 1.0f, true);
                     mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
                     mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
@@ -320,7 +320,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
 
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 360, true);
+                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 330, true);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleX", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
