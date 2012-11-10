@@ -46,7 +46,7 @@ xmlns:tabunlock="http://schemas.android.com/apk/res/com.android.tabunlock"
             />
 
     <!-- time and date -->
-        <com.android.internal.widget.DigitalClock android:id="@+id/time"
+            <com.android.internal.widget.DigitalClock android:id="@+id/time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@id/carrier"
@@ -229,8 +229,6 @@ xmlns:tabunlock="http://schemas.android.com/apk/res/com.android.tabunlock"
             android:id="@+id/waveBebe_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:layout_alignParentBottom="true"
             />
 
     <com.android.internal.widget.multiwaveview.MultiWaveView
