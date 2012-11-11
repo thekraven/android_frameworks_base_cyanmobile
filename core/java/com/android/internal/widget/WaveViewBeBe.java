@@ -64,7 +64,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
     private OnTriggerListener mOnTriggerListener;
     private ArrayList<DrawableHolder> mDrawables = new ArrayList<DrawableHolder>(4);
     private boolean mFingerDown = false;
-    private float mRingRadius = 480; // Radius of bitmap ring. Used to snap halo to it
+    private float mRingRadius; // Radius of bitmap ring. Used to snap halo to it
     private int mSnapRadius = 200; // minimum threshold for drag unlock
     private float mLockCenterX; // center of widget as dictated by widget size
     private float mLockCenterY;
@@ -99,11 +99,11 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
          * isnt officially supported, but this should do for most cases
          */
         if (densityDpi <= 240 && densityDpi >= 200) {
-            mRingRadius = 480.0f;
+            mRingRadius = 960.0f;
         } else if (densityDpi < 200 && densityDpi >= 160) {
             mRingRadius = 480.0f;
         } else if (densityDpi < 160 && densityDpi >= 120) {
-            mRingRadius = 480.0f;
+            mRingRadius = 320.0f;
         }
 
         initDrawables();
@@ -183,7 +183,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
         mUnlockHalo = new DrawableHolder(createDrawable(R.drawable.unlockbebe_halo));
         mUnlockHalo.setX(mLockCenterX);
-        mUnlockHalo.setY(mLockCenterY + 240);
+        mUnlockHalo.setY(mLockCenterY + 480);
         mUnlockHalo.setScaleX(2.0f);
         mUnlockHalo.setScaleY(1.0f);
         mUnlockHalo.setAlpha(0.0f);
@@ -245,8 +245,8 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 mUnlockHalo.setScaleY(1.0f);
                 // mUnlockHalo.setAlpha(1.0f);
                 mUnlockHalo.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
-                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 350, true);
-                mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 240, true);
+                mUnlockHalo.addAnimTo(DURATION, 0, "y", mLockCenterY + 635, true);
+                mUnlockHalo.addAnimTo(0, DURATION, "y", mLockCenterY + 480, true);
                 mUnlockHalo.addAnimTo(0, DURATION, "alpha", 0.0f, true);
 
                 removeCallbacks(mLockTimerActions);
@@ -266,10 +266,10 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
             case STATE_ATTEMPTING:
                 if (DBG) Log.v(TAG, "State ATTEMPTING (fingerDown = " + fingerDown + ")");
-                if (mouseY < mLockCenterY - 35) {
+                if (mouseY < mLockCenterY - 55) {
                     if (fingerDown) {
                         mUnlockWave.addAnimTo(0, 0, "x", mLockCenterX, true);
-                        mUnlockWave.addAnimTo(0, 0, "y", mouseY - 350, true);
+                        mUnlockWave.addAnimTo(0, 0, "y", mouseY - 635, true);
                         mUnlockWave.addAnimTo(0, 0, "scaleX", 1.0f, true);
                         mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
                         mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
@@ -291,7 +291,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     }
                 } else {
                     mUnlockWave.addAnimTo(0, 0, "x", mLockCenterX, true);
-                    mUnlockWave.addAnimTo(0, 0, "y", mouseY - 350 , true);
+                    mUnlockWave.addAnimTo(0, 0, "y", mouseY - 635 , true);
                     mUnlockWave.addAnimTo(0, 0, "scaleX", 1.0f, true);
                     mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
                     mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
@@ -312,15 +312,15 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 
             case STATE_UNLOCK_ATTEMPT:
                 if (DBG) Log.v(TAG, "State UNLOCK_ATTEMPT");
-                if (mouseY < mLockCenterY - 35) {
+                if (mouseY < mLockCenterY - 55) {
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 480, true);
+                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 960, true);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleX", 2.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
 
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
-                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 330, true);
+                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - 680, true);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleX", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
