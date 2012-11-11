@@ -1791,7 +1791,6 @@ class HoneycombLockscreen extends LinearLayout implements KeyguardScreen,
                 mMultiWaveView.setVisibility(View.GONE);
                 mGlowPadView.setVisibility(View.VISIBLE);
             } else if (mUseBebeLockscreen) {
-			    inflater.inflate(R.layout.keyguard_screen_tab_unlock_bb, this, true);
                 mSenseRingSelector.setVisibility(View.GONE);
                 mCircularSelector.setVisibility(View.GONE);
                 mSelector.setVisibility(View.GONE);
