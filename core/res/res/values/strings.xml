@@ -2546,6 +2546,9 @@
     <string name="fuzzy_quarter_to">Quarter till</string>
     <string name="fuzzy_ten_to">Ten till</string>
     <string name="fuzzy_five_to">Five till</string>
+	
+	 <!-- Description of the unlock handle in the Slide unlock screen for tablets. [CHAR LIMIT=NONE] --> 
+    <string name="description_target_unlock_tablet">Swipe to unlock.</string> 
 
     <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system upgrade. -->
     <string name="android_upgrading_title">CyanMobile X is upgrading...</string>
