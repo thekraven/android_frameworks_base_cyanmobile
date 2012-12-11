@@ -92,7 +92,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 	private float mHeightWave;
     private DrawableHolder mUnlockRing;
     private DrawableHolder mUnlockWave;
-//    private DrawableHolder mUnlockDefault;
+    private DrawableHolder mUnlockDefault;
     private DrawableHolder mUnlockHalo;
     private int mLockState = STATE_RESET_LOCK;
     private int mGrabbedState = OnTriggerListener.NO_HANDLE;
@@ -206,13 +206,13 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
         mUnlockWave.setAlpha(1.0f);
         mDrawables.add(mUnlockWave);
 
-//        mUnlockDefault = new DrawableHolder(createDrawable(R.drawable.unlockbebe_default));
-//        mUnlockDefault.setX(mLockCenterX);
- //       mUnlockDefault.setY(mLockCenterY);
-//        mUnlockDefault.setScaleX(1.0f);
-//        mUnlockDefault.setScaleY(1.0f);
-//        mUnlockDefault.setAlpha(1.0f);
- //       mDrawables.add(mUnlockDefault);
+        mUnlockDefault = new DrawableHolder(createDrawable(R.drawable.unlockbebe_default));
+        mUnlockDefault.setX(mLockCenterX);
+        mUnlockDefault.setY(mLockCenterY);
+        mUnlockDefault.setScaleX(1.0f);
+        mUnlockDefault.setScaleY(1.0f);
+        mUnlockDefault.setAlpha(1.0f);
+        mDrawables.add(mUnlockDefault);
 
 //        mUnlockHalo = new DrawableHolder(createDrawable(R.drawable.unlockbebe_halo));
         mUnlockHalo.setX(mLockCenterX);
@@ -261,20 +261,20 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 // mUnlockWave.setY(mLockCenterY);
                 mUnlockWave.setScaleX(dynamicScale);
                 mUnlockWave.setScaleY(dynamicScale);
-                mUnlockWave.setAlpha(1.0f);
+                mUnlockWave.setAlpha(.7f);
                 mUnlockWave.addAnimTo(DURATION, 0, "x", mLockCenterX, true);
                 mUnlockWave.addAnimTo(DURATION, 0, "y", mLockCenterY, true);
 
-//                mUnlockDefault.removeAnimationFor("x");
- //               mUnlockDefault.removeAnimationFor("y");
- //               mUnlockDefault.removeAnimationFor("scaleX");
- //               mUnlockDefault.removeAnimationFor("scaleY");
- //               mUnlockDefault.removeAnimationFor("alpha");
-  //              mUnlockDefault.setX(mLockCenterX);
- //               mUnlockDefault.setY(mLockCenterY);
-  //              mUnlockDefault.setScaleX(1.0f);
-  //              mUnlockDefault.setScaleY(1.0f);
-//                mUnlockDefault.setAlpha(1.0f);
+                mUnlockDefault.removeAnimationFor("x");
+                mUnlockDefault.removeAnimationFor("y");
+                mUnlockDefault.removeAnimationFor("scaleX");
+                mUnlockDefault.removeAnimationFor("scaleY");
+                mUnlockDefault.removeAnimationFor("alpha");
+                mUnlockDefault.setX(mLockCenterX);
+                mUnlockDefault.setY(mLockCenterY);
+                mUnlockDefault.setScaleX(1.0f);
+                mUnlockDefault.setScaleY(1.0f);
+                mUnlockDefault.setAlpha(1.0f);
 
                 mUnlockHalo.removeAnimationFor("x");
                 mUnlockHalo.removeAnimationFor("y");
@@ -334,19 +334,19 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 //            		}
 //                        mUnlockWave.addAnimTo(0, 0, "scaleX", 1.0f, true);
 //                        mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
-                        mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
+                        mUnlockWave.addAnimTo(0, 0, "alpha", .7f, true);
 
- //                       mUnlockDefault.addAnimTo(0, 0, "x", mLockCenterX, true);
- //                       mUnlockDefault.addAnimTo(0, 0, "y", mLockCenterY, true);
- //                       mUnlockDefault.addAnimTo(0, 0, "scaleX", 1.0f, true);
- //                       mUnlockDefault.addAnimTo(0, 0, "scaleY", 1.0f, true);
- //                       mUnlockDefault.addAnimTo(0, 0, "alpha", 0.0f, true);
+                        mUnlockDefault.addAnimTo(0, 0, "x", mLockCenterX, true);
+                        mUnlockDefault.addAnimTo(0, 0, "y", mLockCenterY, true);
+                        mUnlockDefault.addAnimTo(0, 0, "scaleX", 1.0f, true);
+                        mUnlockDefault.addAnimTo(0, 0, "scaleY", 1.0f, true);
+                        mUnlockDefault.addAnimTo(0, 0, "alpha", 1.0f, true);
 
                         mUnlockHalo.addAnimTo(0, 0, "x", mouseX, true);
                         mUnlockHalo.addAnimTo(0, 0, "y", mouseY, true);
                         mUnlockHalo.addAnimTo(0, 0, "scaleX", (float)(dynamicScale*2), true);
                         mUnlockHalo.addAnimTo(0, 0, "scaleY", dynamicScale, true);
-                        mUnlockHalo.addAnimTo(0, 0, "alpha", 1.0f, true);
+                        mUnlockHalo.addAnimTo(0, 0, "alpha", 0.7f, true);
                     }  else {
                         if (DBG) Log.v(TAG, "up detected, moving to STATE_UNLOCK_ATTEMPT");
                         mLockState = STATE_UNLOCK_ATTEMPT;
@@ -364,19 +364,19 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
 //                    mUnlockWave.addAnimTo(0, 0, "scaleY", 1.0f, true);
                     mUnlockWave.addAnimTo(0, 0, "scaleX", dynamicScale, true);
                     mUnlockWave.addAnimTo(0, 0, "scaleY", dynamicScale, true);
-                    mUnlockWave.addAnimTo(0, 0, "alpha", 1.0f, true);
+                    mUnlockWave.addAnimTo(0, 0, "alpha", 0.7f, true);
 
- //                   mUnlockDefault.addAnimTo(0, 0, "x", mLockCenterX, true);
-  //                  mUnlockDefault.addAnimTo(0, 0, "y", mLockCenterY, true);
- //                   mUnlockDefault.addAnimTo(0, 0, "scaleX", 1.0f, true);
- //                   mUnlockDefault.addAnimTo(0, 0, "scaleY", 1.0f, true);
- //                   mUnlockDefault.addAnimTo(0, 0, "alpha", 1.0f, true);
+                    mUnlockDefault.addAnimTo(0, 0, "x", mLockCenterX, true);
+                    mUnlockDefault.addAnimTo(0, 0, "y", mLockCenterY, true);
+                    mUnlockDefault.addAnimTo(0, 0, "scaleX", 1.0f, true);
+                    mUnlockDefault.addAnimTo(0, 0, "scaleY", 1.0f, true);
+                    mUnlockDefault.addAnimTo(0, 0, "alpha", 1.0f, true);
 
                     mUnlockHalo.addAnimTo(0, 0, "x", mouseX, true);
                     mUnlockHalo.addAnimTo(0, 0, "y", mouseY, true);
                     mUnlockHalo.addAnimTo(0, 0, "scaleX", (float)(dynamicScale*2), true);
                     mUnlockHalo.addAnimTo(0, 0, "scaleY", dynamicScale, true);
-                    mUnlockHalo.addAnimTo(0, 0, "alpha", 1.0f, true);
+                    mUnlockHalo.addAnimTo(0, 0, "alpha", 0.7f, true);
                 }
                 break;
 
@@ -398,7 +398,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - (float)(mRingRadius*dynamicScale), true);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleX", (float)(dynamicScale*2), false);
                     mUnlockWave.addAnimTo(FINAL_DURATION, 0, "scaleY", dynamicScale, false);
-                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
+                    mUnlockWave.addAnimTo(FINAL_DURATION, 0, "alpha", 0.7f, false);
 
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "x", mLockCenterX, true);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "y", mLockCenterY - (float)((mRingRadius-(mHeightHalo/2))*dynamicScale), true);
@@ -413,7 +413,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
    //                 mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleY", 1.0f, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleX", dynamicScale, false);
                     mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "scaleY", dynamicScale, false);
-                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "alpha", 1.0f, false);
+                    mUnlockHalo.addAnimTo(FINAL_DURATION, 0, "alpha", 0.7f, false);
 
                     removeCallbacks(mLockTimerActions);
 
@@ -434,7 +434,7 @@ public class WaveViewBeBe extends View implements ValueAnimator.AnimatorUpdateLi
                 if (DBG) Log.v(TAG, "Unknown state " + mLockState);
                 break;
         }
-//        mUnlockDefault.startAnimations(this);
+        mUnlockDefault.startAnimations(this);
         mUnlockHalo.startAnimations(this);
         mUnlockRing.startAnimations(this);
         mUnlockWave.startAnimations(this);
