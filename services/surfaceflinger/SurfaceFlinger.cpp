@@ -480,6 +480,10 @@ void SurfaceFlinger::handleConsoleEvents()
     int what = android_atomic_and(0, &mConsoleSignals);
     if (what & eConsoleAcquired) {
         hw.acquireScreen();
+        // this is a temporary work-around, eventually this should be called  
+        // by the power-manager  
+        SurfaceFlinger::turnElectronBeamOn(mElectronBeamAnimationMode);  
+
     }
 
     if (mDeferReleaseConsole && hw.isScreenAcquired()) {
