@@ -178,12 +178,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int NAVIGATION_BAR_PANEL_LAYER = 16;
     // the on-screen volume indicator and controller shown when the user
     // changes the device volume
-    static final int VOLUME_OVERLAY_LAYER = 17;
+    static final int KEYGUARD_LAYER = 17;
+    static final int KEYGUARD_DIALOG_LAYER = 18;
+    // things in here CAN NOT take focus, but are shown on top of everything else.
+	static final int VOLUME_OVERLAY_LAYER = 19;
     // the keyguard; nothing on top of these can take focus, since they are
     // responsible for power management when displayed.
-    static final int KEYGUARD_LAYER = 18;
-    static final int KEYGUARD_DIALOG_LAYER = 19;
-    // things in here CAN NOT take focus, but are shown on top of everything else.
     static final int SYSTEM_OVERLAY_LAYER = 20;
     static final int SECURE_SYSTEM_OVERLAY_LAYER = 21;
     static final int BOOT_PROGRESS_LAYER = 22;
@@ -265,7 +265,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mLidNavigationAccessibility;
     boolean mScreenOnEarly = false;
     boolean mScreenOnFully = false;
-    int mScreenOffReason;
+//    int mScreenOffReason;
     boolean mOrientationSensorEnabled = false;
     int mCurrentAppOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     static final int DEFAULT_ACCELEROMETER_ROTATION = 0;
@@ -2544,17 +2544,25 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Don't wake the screen if we have not set the option "wake with volume" in CMParts
             // OR if "wake with volume" is set but screen is off due to proximity sensor
             // regardless if WAKE Flag is set in keylayout
-            final boolean isOffByProx = (mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR);
-            if (isWakeKey
-                    && (!mVolumeWakeScreen || isOffByProx)
+ //          final boolean isOffByProx = (mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR);
+ //          if (isWakeKey
+ //                   && (!mVolumeWakeScreen || isOffByProx)
+            if (!isScreenOn 
+                    && isWakeKey 
+                    && !mVolumeWakeScreen 
                     && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))) {
                 isWakeKey = false;
             }
 
+            // make sure keyevent get's handled as power key on volume-wake 
+			if(!isScreenOn && mVolumeWakeScreen && isWakeKey && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+                    || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))) 
+                keyCode=KeyEvent.KEYCODE_POWER; 
+
             // make sure keyevent get's handled as power key on volume-wake
-            if(mVolumeWakeScreen && isWakeKey && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP)
-                    || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)))
-                keyCode = KeyEvent.KEYCODE_POWER;
+  //          if(!isScreenOn && mVolumeWakeScreen && isWakeKey && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+   //                 || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)))
+   //             keyCode = KeyEvent.KEYCODE_POWER;
 
             if (down && isWakeKey) {
                 if (keyguardActive) {
@@ -2880,7 +2888,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mKeyguardMediator.onScreenTurnedOff(why);
         }
         synchronized (mLock) {
-            mScreenOffReason = why;
+ //           mScreenOffReason = why;
             updateOrientationListenerLp();
             updateLockScreenTimeout();
         }

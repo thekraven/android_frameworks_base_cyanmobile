@@ -204,7 +204,6 @@
             android:singleLine="true"
             android:paddingRight="2dip"
             android:paddingLeft="2dip"
-            android:layout_marginTop="2dip"
             android:gravity="center_vertical"
             android:orientation="horizontal"/>
 

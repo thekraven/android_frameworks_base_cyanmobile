@@ -1018,8 +1018,8 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
      */
     private boolean isWakeKeyWhenKeyguardShowing(int keyCode) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
+      //      case KeyEvent.KEYCODE_VOLUME_UP:
+      //      case KeyEvent.KEYCODE_VOLUME_DOWN:
             case KeyEvent.KEYCODE_MUTE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
