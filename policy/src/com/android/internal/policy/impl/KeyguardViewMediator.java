@@ -17,7 +17,6 @@
 
 package com.android.internal.policy.impl;
 
-import static android.provider.Settings.System.SCREEN_OFF_TIMEOUT;
 import com.android.internal.policy.impl.KeyguardViewManager.ShowMode;
 import com.android.internal.telephony.IccCard;
 import com.android.internal.widget.LockPatternUtils;
@@ -45,7 +44,6 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.provider.CmSystem;
 import android.provider.Settings;
-import android.provider.Settings.SettingNotFoundException;
 import android.telephony.TelephonyManager;
 import android.util.Config;
 import android.util.EventLog;
@@ -99,7 +97,6 @@ import android.widget.TextView;
  */
 public class KeyguardViewMediator implements KeyguardViewCallback,
         KeyguardUpdateMonitor.SimStateCallback {
-    private static final int KEYGUARD_DISPLAY_TIMEOUT_DELAY_DEFAULT = 30000;
     private final static boolean DEBUG = false;
     private final static boolean DBG_WAKE = false;
 
@@ -140,7 +137,7 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
      * turning on the keyguard (i.e, the user has this much time to turn
      * the screen back on without having to face the keyguard).
      */
-    private static final int KEYGUARD_LOCK_AFTER_DELAY_DEFAULT = 5000;
+    private static final int KEYGUARD_DELAY_MS = 5000;
 
     /**
      * How long we'll wait for the {@link KeyguardViewCallback#keyguardDoneDrawing()}
@@ -402,12 +399,12 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
                 // the screen went off
                 int securityLockTimeoutDelay = (why == WindowManagerPolicy.OFF_BECAUSE_OF_TIMEOUT ? Settings.System
                         .getInt(cr, Settings.System.SCREEN_LOCK_SECURITY_TIMEOUT_DELAY,
-                                KEYGUARD_LOCK_AFTER_DELAY_DEFAULT) : Settings.System.getInt(cr,
+                                KEYGUARD_DELAY_MS) : Settings.System.getInt(cr,
                         Settings.System.SCREEN_LOCK_SECURITY_SCREENOFF_DELAY, 0));
 
                 int slideLockTimeoutDelay = (why == WindowManagerPolicy.OFF_BECAUSE_OF_TIMEOUT ? Settings.System
                         .getInt(cr, Settings.System.SCREEN_LOCK_SLIDE_TIMEOUT_DELAY,
-                                KEYGUARD_LOCK_AFTER_DELAY_DEFAULT) : Settings.System.getInt(cr,
+                                KEYGUARD_DELAY_MS) : Settings.System.getInt(cr,
                         Settings.System.SCREEN_LOCK_SLIDE_SCREENOFF_DELAY, 0));
 
                 boolean separateSlideLockTimeoutEnabled = Settings.System.getInt(cr,
@@ -419,19 +416,6 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
 
                 boolean slideLockTimeoutShouldBeConsidered = separateSlideLockTimeoutEnabled
                         && securityLockScreenEnabled;
-
-                // From DisplaySettings
-                long displayTimeout = Settings.System.getInt(cr, SCREEN_OFF_TIMEOUT,
-                        KEYGUARD_DISPLAY_TIMEOUT_DELAY_DEFAULT);
-
-                // From SecuritySettings
-                final long lockAfterTimeout = Settings.Secure.getInt(cr,
-                        Settings.Secure.LOCK_SCREEN_LOCK_AFTER_TIMEOUT,
-                        KEYGUARD_LOCK_AFTER_DELAY_DEFAULT);
-
-                // From DevicePolicyAdmin
-                final long policyTimeout = mLockPatternUtils.getDevicePolicyManager()
-                        .getMaximumTimeToLock(null);
 
                 if (DEBUG)
                     Log.d(TAG, "Security lock screen timeout delay is " + securityLockTimeoutDelay
@@ -469,24 +453,7 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
                     }
                     delayedScreenLockOn(delay, intent);
                 } else {
-                   long timeout;
-                   if (policyTimeout > 0) {
-                      // policy in effect. Make sure we don't go beyond policy limit.
-                      displayTimeout = Math.max(displayTimeout, 0); // ignore negative values
-                      timeout = Math.min(policyTimeout - displayTimeout, lockAfterTimeout);
-                   } else {
-                      timeout = lockAfterTimeout;
-                   }
-
-                   if (timeout <= 0) {
-                      // Lock now
-                      mSuppressNextLockSound = true;
-                      doKeyguard(SHOW_SECURITY);
-                   } else {
-                      Intent intent = new Intent(DELAYED_KEYGUARD_ACTION);
-                      intent.putExtra("seq", mDelayedShowingSequence);
-                      delayedScreenLockOnLong(timeout, intent);
-                   }
+                    doKeyguard(SHOW_SECURITY);
                 }
             } else if (why == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR) {
                 // Do not enable the keyguard if the prox sensor forced the screen off.
@@ -500,20 +467,6 @@ public class KeyguardViewMediator implements KeyguardViewCallback,
      * Handles setting an alarm to enable the screen lock after a delay
      */
     private void delayedScreenLockOn(int delay, Intent intent) {
-        // set an alarm to enable the screen lock a little bit later
-        // (i.e, give the user a chance to turn the screen back on
-        // within a certain window without having to unlock the screen)
-        long when = SystemClock.elapsedRealtime() + delay;
-        PendingIntent sender = PendingIntent.getBroadcast(mContext, 0, intent,
-                PendingIntent.FLAG_CANCEL_CURRENT);
-        mAlarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, when, sender);
-        if (DEBUG)
-            Log.d(TAG, "setting alarm for DELAYED_KEYGUARD_ACTION, seq = "
-                    + mDelayedShowingSequence
-                            + ", handlerMessage " + intent.getIntExtra("handlerMessage", -1));
-    }
-
-    private void delayedScreenLockOnLong(long delay, Intent intent) {
         // set an alarm to enable the screen lock a little bit later
         // (i.e, give the user a chance to turn the screen back on
         // within a certain window without having to unlock the screen)

@@ -1634,13 +1634,6 @@ public final class Settings {
         public static final String SCREEN_BRIGHTNESS_MODE = "screen_brightness_mode";
 
         /**
-         * Adjustment to auto-brightness to make it generally more (>0.0 <1.0)
-         * or less (<0.0 >-1.0) bright.
-         * @hide
-         */
-        public static final String SCREEN_AUTO_BRIGHTNESS_ADJ = "screen_auto_brightness_adj";
-
-        /**
          * SCREEN_BRIGHTNESS_MODE value for manual mode.
          */
         public static final int SCREEN_BRIGHTNESS_MODE_MANUAL = 0;
@@ -4181,7 +4174,6 @@ public final class Settings {
             SCREEN_OFF_TIMEOUT,
             SCREEN_BRIGHTNESS,
             SCREEN_BRIGHTNESS_MODE,
-            SCREEN_AUTO_BRIGHTNESS_ADJ,
             VIBRATE_ON,
             NOTIFICATIONS_USE_RING_VOLUME,
             MODE_RINGER,
@@ -4967,13 +4959,6 @@ public final class Settings {
          * @hide
          */
         public static final String LOCK_CUSTOM_MSG = "lock_screen_custom_msg";
-
-        /**
-         * This preference allows the device to be locked given time after screen goes off,
-         * subject to current DeviceAdmin policy limits.
-         * @hide
-         */
-        public static final String LOCK_SCREEN_LOCK_AFTER_TIMEOUT = "lock_screen_lock_after_timeout";
 
         /**
          * Whether assisted GPS should be enabled or not.
