@@ -134,8 +134,7 @@ public class DataTraffics extends TextView {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            if (action.equals(Intent.ACTION_TIME_TICK) ||
-                    action.equals(Intent.ACTION_TIME_CHANGED) ||
+            if (action.equals(Intent.ACTION_TIME_CHANGED) ||
                     action.equals(Intent.ACTION_TIMEZONE_CHANGED) ||
                     action.equals(Intent.ACTION_CONFIGURATION_CHANGED) ||
                     action.equals(ConnectivityManager.CONNECTIVITY_ACTION) ||
@@ -183,10 +182,13 @@ public class DataTraffics extends TextView {
         String result;
         y = (int)what;
         z = (int)(y * BYTE_TO_KILOBIT);
-        result = mDecimalFormater.format(z)+"KB/s";
-        if (z > EXPECTED_SIZE_IN_KILOBIT) {
-          z = (int)(y * BYTE_TO_KILOBIT * KILOBIT_TO_MEGABIT);
-          result = mDecimalFormater.format(z)+"MB/s";
+        if ( z < 0 ) {
+           result = "0 KB/s";
+        } else if (z > EXPECTED_SIZE_IN_KILOBIT) {
+           z = (int)(y * BYTE_TO_KILOBIT * KILOBIT_TO_MEGABIT);
+           result = mDecimalFormater.format(z)+"MB/s";
+        } else {
+           result = mDecimalFormater.format(z)+"KB/s";
         }
         return result;
     }
@@ -223,10 +225,13 @@ public class DataTraffics extends TextView {
         mCarrierColor = (Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.STATUS_BAR_CARRIERCOLOR, defValuesColor));
 
-        if(getDataState(mContext))
-            setVisibility(mAirplaneOn ? View.GONE : View.VISIBLE);
-        else
+        if(getDataState(mContext) && !mAirplaneOn) {
+            setVisibility(View.VISIBLE);
+            Settings.System.putInt(mContext.getContentResolver(), Settings.System.STATUS_BAR_CLOCKEXPAND, 0);
+        } else {
             setVisibility(View.GONE);
+            Settings.System.putInt(mContext.getContentResolver(), Settings.System.STATUS_BAR_CLOCKEXPAND, 1);
+        }
     }
 }
 

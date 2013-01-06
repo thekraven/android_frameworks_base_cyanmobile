@@ -68,8 +68,7 @@ public final class PowerDateView extends TextView {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            if (action.equals(Intent.ACTION_TIME_TICK)
-                    || action.equals(Intent.ACTION_TIMEZONE_CHANGED)) {
+            if (action.equals(Intent.ACTION_TIMEZONE_CHANGED)) {
                 updateSettings();
             }
             updateClock();
@@ -130,7 +129,7 @@ public final class PowerDateView extends TextView {
         Date now = new Date();
         CharSequence dow = DateFormat.format("EEEE", now);
         CharSequence date = DateFormat.getLongDateFormat(mContext).format(now);
-        setText(mContext.getString(R.string.status_bar_date_formatter, dow, date));
+        setText(mContext.getString(R.string.status_bar_date_formatter, dow, date).toUpperCase());
 	setTextColor(mClockColor);
     }
 

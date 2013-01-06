@@ -79,6 +79,8 @@ public class ClockExpand extends TextView {
                     Settings.System.STATUSBAR_MORE_EXPANDED), false, this);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.STATUS_BAR_CLOCKCOLOR), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.STATUS_BAR_CLOCKEXPAND), false, this);
         }
 
         @Override public void onChange(boolean selfChange) {
@@ -165,7 +167,7 @@ public class ClockExpand extends TextView {
         boolean b24 = DateFormat.is24HourFormat(context);
         int res;
 
-        if (b24 && AM_PM_STYLE == AM_PM_STYLE_GONE) {
+        if (b24) {
             res = R.string.twenty_four_hour_time_format;
         } else {
             res = R.string.twelve_hour_time_format;
@@ -258,8 +260,10 @@ public class ClockExpand extends TextView {
             }
         }
 
-        mShowClock = (Settings.System.getInt(resolver,
-                Settings.System.STATUSBAR_MORE_EXPANDED, 1) != 1);
+        mShowClock = ((Settings.System.getInt(resolver,
+                Settings.System.STATUSBAR_MORE_EXPANDED, 1) != 1) && 
+               (Settings.System.getInt(resolver,
+                Settings.System.STATUS_BAR_CLOCKEXPAND, 1) == 1));
 
         if(mShowClock)
             setVisibility(View.VISIBLE);

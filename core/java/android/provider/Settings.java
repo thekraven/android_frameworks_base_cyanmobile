@@ -2975,6 +2975,25 @@ public final class Settings {
         public static final String STATUS_BAR_CLOCK = "status_bar_clock";
 
         /**
+         * Display style of the day of the week before clock in status bar
+         * 0: Normal display
+         * 1: Small display
+         * 2: No display	
+         * default: 2
+         * @hide
+         */
+        public static final String STATUS_BAR_WEEKDAY = "status_bar_weekday";
+
+        /**
+         * Whether to show the clock in expanded
+         * 0: don't show the clock
+         * 1: show the clock
+         * default: 1
+         * @hide
+         */
+        public static final String STATUS_BAR_CLOCKEXPAND = "status_bar_clockexpand";
+
+        /**
          * Whether to show the intruder alert in status bar
          * 0: don't show the intruder alert
          * 1: show the intruder alert
@@ -2982,6 +3001,13 @@ public final class Settings {
          * @hide
          */
         public static final String STATUS_BAR_INTRUDER_ALERT = "status_bar_clock_intruder_alert";
+
+        /**
+         * choose long time to show the intruder alert in status bar
+         * default: 3000
+         * @hide
+         */
+        public static final String STATUS_BAR_INTRUDER_TIME = "status_bar_clock_intruder_time";
 
         /**
           * Volume keys control cursor in text fields (default is 0)
@@ -3078,6 +3104,12 @@ public final class Settings {
          * @hide
          */
         public static final String STATUS_BAR_SHOWRAM = "status_bar_showram";
+
+        /**
+         * Whether to show the Icon status in status bar
+         * @hide
+         */
+        public static final String STATUS_BAR_SHOWICONEX = "status_bar_showiconex";
 
         /**
          * Whether to show the signal text or signal bars.
@@ -3442,6 +3474,54 @@ public final class Settings {
          * @hide
          */
         public static final String STATUS_BAR_FOURG = "status_bar_fourg";
+
+        /**
+         * Show the weather on the lock screen
+         * @hide
+         */
+        public static final String LOCKSCREEN_WEATHER = "lockscreen_weather";
+
+        /**
+         * Show the current weather location on the lock screen
+         * @hide
+         */
+        public static final String WEATHER_SHOW_LOCATION = "weather_show_location";
+
+        /**
+         * Show the current weather location on the lock screen
+         * @hide
+         */
+        public static final String WEATHER_SHOW_TIMESTAMP = "weather_show_timestamp";
+
+        /**
+         * Use the custom/manually configured weather location
+         * @hide
+         */
+        public static final String WEATHER_USE_CUSTOM_LOCATION = "weather_use_custom_location";
+
+        /**
+         * Stores the custom/manually configured weather location
+         * @hide
+         */
+        public static final String WEATHER_CUSTOM_LOCATION = "weather_custom_location";
+
+        /**
+         * Stores the weather update frequency
+         * @hide
+         */
+        public static final String WEATHER_UPDATE_INTERVAL = "weather_update_interval";
+
+        /**
+         * Use Metric measurements (celcius, km/h) for weather data
+         * @hide
+         */
+        public static final String WEATHER_USE_METRIC = "weather_use_metric";
+
+        /**
+         * Invert low/high temperature display	
+         * @hide	
+         */	
+        public static final String WEATHER_INVERT_LOWHIGH = "weather_invert_lowhigh";
 
         /**
          * Whether to wake the screen with the trackball. The value is boolean (1 or 0).
@@ -3892,6 +3972,20 @@ public final class Settings {
          * @hide
          */
         public static final String WIDGET_BUTTONS = "expanded_widget_buttons";
+
+        /**
+         * Tile View to Use
+         *
+         * @hide
+         */
+        public static final String QUICK_SETTINGS_TILES = "quick_settings_tiles";
+
+        /**
+         * Tile View to Use
+         *
+         * @hide
+         */
+        public static final String USER_MY_NUMBERS = "user_my_numbers";
 
         /** 
         * Notification Power Widget - Custom Brightness Mode

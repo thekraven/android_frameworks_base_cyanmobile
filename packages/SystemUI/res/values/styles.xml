@@ -57,18 +57,70 @@
     <style name="TextAppearance.StatusBar.Expanded" parent="@android:style/TextAppearance.StatusBar" />
 
     <style name="TextAppearance.StatusBar.Expanded.Clock">
-        <item name="android:textSize">30dp</item>
+        <item name="android:textSize">32dp</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:singleLine">true</item>
     </style>
 
     <style name="TextAppearance.StatusBar.Expanded.Date">
         <item name="android:textSize">12dp</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:singleLine">true</item>
     </style>
 
     <style name="TextAppearance.StatusBar.IntruderAlert"
         parent="@android:style/TextAppearance.StatusBar">
     </style>
+
+    <style name="TextAppearance.QuickSettings" parent="@android:style/TextAppearance.StatusBar" />
+
+    <style name="TextAppearance.QuickSettings.TileView">
+        <item name="android:paddingLeft">2dp</item>
+        <item name="android:paddingRight">2dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:textSize">10dp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@*android:color/color_default_cyanmobile</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:fadingEdge">horizontal</item>
+    </style>
+
+    <style name="TextAppearance.QuickSettings.TileView.Date">
+        <item name="android:paddingLeft">1dp</item>
+        <item name="android:paddingRight">1dp</item>
+        <item name="android:paddingBottom">2dp</item>
+        <item name="android:drawablePadding">4dp</item>
+        <item name="android:textSize">8dp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@*android:color/color_default_cyanmobile</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:fadingEdge">horizontal</item>
+    </style>
+
+    <style name="TextAppearance.QuickSettings.Clock" parent="@style/TextAppearance.QuickSettings.TileView">
+        <item name="android:textSize">20dp</item>
+    </style>
+
+    <style name="TextAppearance.QuickSettings.Date" parent="@style/TextAppearance.QuickSettings.TileView">
+        <item name="android:textSize">14dp</item>
+    </style>
+
+    <style name="TextAppearance.QuickSettings.Alarm" parent="@style/TextAppearance.QuickSettings.TileView">
+        <item name="android:textSize">14dp</item>
+        <item name="android:textColor">@*android:color/color_default_cyanmobile</item>
+    </style>
+
+    <style name="BaseBrightnessDialogContainer">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginLeft">8dp</item>
+        <item name="android:layout_marginRight">8dp</item>
+        <item name="android:padding">16dp</item>
+    </style>
+    <style name="BrightnessDialogContainer" parent="@style/BaseBrightnessDialogContainer" />
 
         <style name="Animations" />
 
