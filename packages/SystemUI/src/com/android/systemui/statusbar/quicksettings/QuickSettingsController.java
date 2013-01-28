@@ -34,6 +34,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
+import com.android.systemui.statusbar.quicksettings.quicktile.AlarmTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.AirplaneModeTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.AutoRotateTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.BatteryTile;
@@ -44,6 +45,7 @@ import com.android.systemui.statusbar.quicksettings.quicktile.TorchTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.GPSTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.MobileNetworkTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.MobileNetworkTypeTile;
+import com.android.systemui.statusbar.quicksettings.quicktile.NotifTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.QuickSettingsTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.RingerModeTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.SyncTile;
@@ -54,6 +56,8 @@ import com.android.systemui.statusbar.quicksettings.quicktile.SleepTimeTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.SettingsTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.TimeTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.UserTile;
+import com.android.systemui.statusbar.quicksettings.quicktile.PowerMenuTile;
+import com.android.systemui.statusbar.quicksettings.quicktile.ProfileTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.WeatherTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.WiFiTile;
 import com.android.systemui.statusbar.quicksettings.quicktile.WifiAPTile;
@@ -93,11 +97,14 @@ public class QuickSettingsController {
     public static final String TILE_AUTOROTATE = "toggleAutoRotate";
     public static final String TILE_AIRPLANE = "toggleAirplane";
     public static final String TILE_TORCH = "toggleFlashlight";  // Keep old string for compatibility
-    public static final String TILE_WIMAX = "toggleWimax";
     public static final String TILE_LOCKSCREEN = "toggleLockscreen";
     public static final String TILE_USER = "toggleUser";
     public static final String TILE_CPU = "toggleCpu";
     public static final String TILE_WEATHER = "toggleWeather";
+    public static final String TILE_NOTIF = "toggleNotif";
+    public static final String TILE_PROFILE = "toggleProfile";
+    public static final String TILE_POWER = "togglePower";
+    public static final String TILE_ALARM = "toggleAlarm";
 
     private static final String TILE_DELIMITER = "|";
     private static final String TILES_DEFAULT = TILE_USER
@@ -155,6 +162,10 @@ public class QuickSettingsController {
     public static final int SLEEP_TILE = 18;
     public static final int CPU_TILE = 19;
     public static final int WEATHER_TILE = 20;
+    public static final int NOTIF_TILE = 21;
+    public static final int PROFILE_TILE = 22;
+    public static final int POWER_TILE = 23;
+    public static final int ALARM_TILE = 24;
 
     public static final int USER_TILE = 99;
 
@@ -231,9 +242,16 @@ public class QuickSettingsController {
                 mQuickSettings.add(CPU_TILE);
             } else if (tile.equals(TILE_WEATHER)) {
                 mQuickSettings.add(WEATHER_TILE);
+            } else if (tile.equals(TILE_NOTIF)) {
+                mQuickSettings.add(NOTIF_TILE);
+            } else if (tile.equals(TILE_PROFILE)) {
+                mQuickSettings.add(PROFILE_TILE);
+            } else if (tile.equals(TILE_POWER)) {
+                mQuickSettings.add(POWER_TILE);
+            } else if (tile.equals(TILE_ALARM)) {
+                mQuickSettings.add(ALARM_TILE);
             } else if (tile.equals(TILE_USER)) {
                 mQuickSettings.add(USER_TILE);
-            } else if (tile.equals(TILE_WIMAX)) {
                 // Not available yet
             }
         }
@@ -271,7 +289,8 @@ public class QuickSettingsController {
             super(handler);
         }
 
-        public void onChange(boolean selfChange, Uri uri) {
+        @Override
+        public void onChangeUri(Uri uri, boolean selfChange) {
             ContentResolver resolver = mContext.getContentResolver();
             for (QuickSettingsTile tile : mObserverMap.get(uri)) {
                 tile.onChangeUri(resolver, uri);
@@ -398,6 +417,18 @@ public class QuickSettingsController {
                 break;
             case WEATHER_TILE:
                 qs = new WeatherTile(mContext, inflater, mContainerView, this);
+                break;
+            case NOTIF_TILE:
+                qs = new NotifTile(mContext, inflater, mContainerView, this);
+                break;
+            case PROFILE_TILE:
+                qs = new ProfileTile(mContext, inflater, mContainerView, this);
+                break;
+            case POWER_TILE:
+                qs = new PowerMenuTile(mContext, inflater, mContainerView, this);
+                break;
+            case ALARM_TILE:
+                qs = new AlarmTile(mContext, inflater, mContainerView, this);
                 break;
             case USER_TILE:
                 qs = new UserTile(mContext, inflater, mContainerView, this);

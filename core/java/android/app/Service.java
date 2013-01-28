@@ -16,7 +16,7 @@
 
 package android.app;
 
-import android.content.ComponentCallbacks;
+import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ContextWrapper;
@@ -273,7 +273,7 @@ import java.io.PrintWriter;
  * {@sample development/samples/ApiDemos/src/com/example/android/apis/app/MessengerServiceActivities.java
  *      bind}
  */
-public abstract class Service extends ContextWrapper implements ComponentCallbacks {
+public abstract class Service extends ContextWrapper implements ComponentCallbacks2 {
     private static final String TAG = "Service";
 
     public Service() {
@@ -368,7 +368,14 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
      * pending events will be delivered at the point of restart).
      */
     public static final int START_REDELIVER_INTENT = 3;
-    
+
+    /**	
+     * Special constant for reporting that we are done processing
+     * {@link #onTaskRemoved(Intent)}.
+     * @hide
+     */
+    public static final int START_TASK_REMOVED_COMPLETE = 1000;
+
     /**
      * This flag is set in {@link #onStartCommand} if the Intent is a
      * re-delivery of a previously delivered intent, because the service
@@ -443,7 +450,10 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
     
     public void onLowMemory() {
     }
-    
+
+    public void onTrimMemory(int level) {
+    }
+
     /**
      * Return the communication channel to the service.  May return null if 
      * clients can not bind to the service.  The returned
@@ -497,7 +507,20 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
      */
     public void onRebind(Intent intent) {
     }
-    
+
+    /**
+     * This is called if the service is currently running and the user has	
+     * removed a task that comes from the service's application.  If you have
+     * set {@link android.content.pm.ServiceInfo#FLAG_STOP_WITH_TASK ServiceInfo.FLAG_STOP_WITH_TASK}
+     * then you will not receive this callback; instead, the service will simply
+     * be stopped.
+     *
+     * @param rootIntent The original root Intent that was used to launch
+     * the task that is being removed.
+     */
+    public void onTaskRemoved(Intent rootIntent) {
+    }
+
     /**
      * Stop the service, if it was previously started.  This is the same as
      * calling {@link android.content.Context#stopService} for this particular service.

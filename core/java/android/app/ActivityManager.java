@@ -18,6 +18,8 @@
 package android.app;
 
 import com.android.internal.util.MemInfoReader;
+import com.android.internal.app.IUsageStats;
+import com.android.internal.os.PkgUsageStats;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -31,6 +33,7 @@ import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.os.Debug;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.Handler;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -40,6 +43,12 @@ import android.text.TextUtils;
 import android.util.Slog;
 import android.view.Display;
 import java.util.List;
+import android.util.Log;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Interact with the overall activities running in the system.
@@ -411,6 +420,81 @@ public class ActivityManager {
     public List<RunningTaskInfo> getRunningTasks(int maxNum)
             throws SecurityException {
         return getRunningTasks(maxNum, 0, null);
+    }
+
+    /**
+     * Remove some end of a task's activity stack that is not part of
+     * the main application.  The selected activities will be finished, so
+     * they are no longer part of the main task.
+     *
+     * @param taskId The identifier of the task.
+     * @param subTaskIndex The number of the sub-task; this corresponds
+     * to the index of the thumbnail returned by {@link #getTaskThumbnails(int)}.
+     * @return Returns true if the sub-task was found and was removed.
+     *	
+     * @hide
+     */
+    public boolean removeSubTask(int taskId, int subTaskIndex)
+            throws SecurityException {
+        try {
+            return ActivityManagerNative.getDefault().removeSubTask(taskId, subTaskIndex);
+        } catch (RemoteException e) {
+            // System dead, we will be dead too soon!
+            return false;
+        }
+    }
+
+    /**
+     * If set, the process of the root activity of the task will be killed
+     * as part of removing the task.
+     * @hide
+     */
+    public static final int REMOVE_TASK_KILL_PROCESS = 0x0001;
+
+    /**
+     * Completely remove the given task.
+     *
+     * @param taskId Identifier of the task to be removed.
+     * @param flags Additional operational flags.  May be 0 or
+     * {@link #REMOVE_TASK_KILL_PROCESS}.
+     * @return Returns true if the given task was found and removed.
+     *
+     * @hide
+     */
+    public boolean removeTask(int taskId, int flags)
+            throws SecurityException {
+        try {
+            return ActivityManagerNative.getDefault().removeTask(taskId, flags);
+        } catch (RemoteException e) {
+            // System dead, we will be dead too soon!
+            return false;
+        }
+    }
+
+    /**
+     * Flag for {@link #moveTaskToFront(int, int)}: also move the "home"
+     * activity along with the task, so it is positioned immediately behind
+     * the task.
+     */
+    public static final int MOVE_TASK_WITH_HOME = 0x00000001;
+
+    /**
+     * Ask that the task associated with a given task ID be moved to the
+     * front of the stack, so it is now visible to the user.  Requires that
+     * the caller hold permission {@link android.Manifest.permission#REORDER_TASKS}
+     * or a SecurityException will be thrown.
+     *
+     * @param taskId The identifier of the task to be moved, as found in
+     * {@link RunningTaskInfo} or {@link RecentTaskInfo}.
+     * @param flags Additional operational flags, 0 or more of
+     * {@link #MOVE_TASK_WITH_HOME}.
+     */
+    public void moveTaskToFront(int taskId, int flags) {
+        try {
+            ActivityManagerNative.getDefault().moveTaskToFront(taskId, flags);
+        } catch (RemoteException e) {
+            // System dead, we will be dead too soon!
+        }
     }
 
     /**
@@ -1207,5 +1291,23 @@ public class ActivityManager {
             ActivityManagerNative.getDefault().updateConfiguration(values);
         } catch (RemoteException e) {
         }
+    }
+
+    /**
+     * Returns the usage statistics of each installed package.
+     *
+     * @hide
+     */
+    public PkgUsageStats[] getAllPackageUsageStats() {
+        try {
+            IUsageStats usageStatsService = IUsageStats.Stub.asInterface(
+                    ServiceManager.getService("usagestats"));
+            if (usageStatsService != null) {
+                return usageStatsService.getAllPkgUsageStats();
+            }
+        } catch (RemoteException e) {
+            Log.w(TAG, "Could not query usage stats", e);	
+        }
+        return new PkgUsageStats[0];
     }
 }

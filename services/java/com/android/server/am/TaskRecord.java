@@ -26,7 +26,6 @@ import java.io.PrintWriter;
 class TaskRecord {
     final int taskId;       // Unique identifier for this task.
     final String affinity;  // The affinity name for this task, or null.
-    final boolean clearOnBackground; // As per the original activity.
     Intent intent;          // The original intent that started the task.
     Intent affinityIntent;  // Intent of affinity-moved activity that started this task.
     ComponentName origActivity; // The non-alias activity component of the intent.
@@ -38,11 +37,9 @@ class TaskRecord {
 
     String stringName;      // caching of toString() result.
     
-    TaskRecord(int _taskId, ActivityInfo info, Intent _intent,
-            boolean _clearOnBackground) {
+    TaskRecord(int _taskId, ActivityInfo info, Intent _intent) {
         taskId = _taskId;
         affinity = info.taskAffinity;
-        clearOnBackground = _clearOnBackground;
         setIntent(_intent, info);
     }
 
@@ -58,6 +55,15 @@ class TaskRecord {
         stringName = null;
         
         if (info.targetActivity == null) {
+            if (_intent != null) {
+                // If this Intent has a selector, we want to clear it for the
+                // recent task since it is not relevant if the user later wants
+                // to re-launch the app.
+                if (_intent.getSelector() != null) {
+                    _intent = new Intent(_intent);
+                    _intent.setSelector(null);
+                }
+            }
             intent = _intent;
             realActivity = _intent != null ? _intent.getComponent() : null;
             origActivity = null;
@@ -67,6 +73,7 @@ class TaskRecord {
             if (_intent != null) {
                 Intent targetIntent = new Intent(_intent);
                 targetIntent.setComponent(targetComponent);
+                targetIntent.setSelector(null);
                 intent = targetIntent;
                 realActivity = targetComponent;
                 origActivity = _intent.getComponent();
@@ -86,9 +93,8 @@ class TaskRecord {
     }
     
     void dump(PrintWriter pw, String prefix) {
-        if (clearOnBackground || numActivities != 0 || rootWasReset) {
-            pw.print(prefix); pw.print("clearOnBackground="); pw.print(clearOnBackground);
-                    pw.print(" numActivities="); pw.print(numActivities);
+        if (numActivities != 0 || rootWasReset) {
+            pw.print(prefix); pw.print("numActivities="); pw.print(numActivities);
                     pw.print(" rootWasReset="); pw.println(rootWasReset);
         }
         if (affinity != null) {
@@ -97,14 +103,14 @@ class TaskRecord {
         if (intent != null) {
             StringBuilder sb = new StringBuilder(128);
             sb.append(prefix); sb.append("intent={");
-            intent.toShortString(sb, true, false);
+            intent.toShortString(sb, false, true, false);
             sb.append('}');
             pw.println(sb.toString());
         }
         if (affinityIntent != null) {
             StringBuilder sb = new StringBuilder(128);
             sb.append(prefix); sb.append("affinityIntent={");
-            affinityIntent.toShortString(sb, true, false);
+            affinityIntent.toShortString(sb, false, true, false);
             sb.append('}');
             pw.println(sb.toString());
         }

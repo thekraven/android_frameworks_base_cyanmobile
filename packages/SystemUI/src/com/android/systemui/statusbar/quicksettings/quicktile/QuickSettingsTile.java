@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.ServiceManager;
 import android.os.RemoteException;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.view.animation.AccelerateInterpolator;
 import android.view.LayoutInflater;
@@ -40,6 +41,10 @@ public class QuickSettingsTile implements OnClickListener {
     protected QuickSettingsController mQsc;
     IStatusBarService mStatusBarService;
     Handler mHandler;
+    protected boolean mHapticFeedback;
+    protected Vibrator mVibrator;
+    private long[] mClickPattern;
+    private long[] mLongClickPattern;
 
     public QuickSettingsTile(Context context, LayoutInflater inflater, QuickSettingsContainerView container, QuickSettingsController qsc) {
         mContext = context;
@@ -50,6 +55,7 @@ public class QuickSettingsTile implements OnClickListener {
         mQsc = qsc;
         mTileLayout = R.layout.quick_settings_tile_generic;
         mHandler = new Handler();
+        mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
     }
 
     public void setupQuickSettingsTile(){
@@ -58,6 +64,7 @@ public class QuickSettingsTile implements OnClickListener {
         updateQuickSettings();
         mTile.setOnClickListener(this);
         mTile.setOnLongClickListener(mOnLongClick);
+        updateHapticFeedbackSetting();
     }
 
     void createQuickSettings(){
@@ -76,7 +83,6 @@ public class QuickSettingsTile implements OnClickListener {
         TextView tv = (TextView) mTile.findViewById(R.id.tile_textview);
         tv.setCompoundDrawablesWithIntrinsicBounds(0, mDrawable, 0, 0);
         tv.setText(mLabel);
-        flipTile();
     }
 
     void startSettingsActivity(String action){
@@ -85,8 +91,10 @@ public class QuickSettingsTile implements OnClickListener {
     }
 
     void startSettingsActivity(Intent intent) {
+        updateHapticFeedbackSetting();
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         mContext.startActivity(intent);
+        provideHapticFeedback(mLongClickPattern);
         startCollapseActivity();
     }
 
@@ -112,8 +120,38 @@ public class QuickSettingsTile implements OnClickListener {
         return mStatusBarService;
     }
 
+    private void updateHapticFeedbackSetting() {
+        ContentResolver cr = mContext.getContentResolver();
+        int expandedHapticFeedback = Settings.System.getInt(cr,
+                Settings.System.EXPANDED_HAPTIC_FEEDBACK, 2);
+        long[] clickPattern = null, longClickPattern = null;
+        boolean hapticFeedback;
+	
+        if (expandedHapticFeedback == 2) {
+             hapticFeedback = Settings.System.getInt(cr,
+                     Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 1;
+        } else {
+            hapticFeedback = (expandedHapticFeedback == 1);
+        }
+	
+        if (hapticFeedback) {
+            clickPattern = Settings.System.getLongArray(cr,
+                    Settings.System.HAPTIC_DOWN_ARRAY, null);
+            longClickPattern = Settings.System.getLongArray(cr,
+                    Settings.System.HAPTIC_LONG_ARRAY, null);
+        }
+
+        setHapticFeedback(hapticFeedback, clickPattern, longClickPattern);
+    }
+
+    void setHapticFeedback(boolean enabled, long[] clickPattern, long[] longClickPattern) {
+        mHapticFeedback = enabled;
+        mClickPattern = clickPattern;
+        mLongClickPattern = longClickPattern;
+    }
+
     void flipTile() {
-        if (mTile == null) return;
+        if (mTile == null || !enableFlip()) return;
 
         final float centerX = mTile.getWidth() / 2.0f;
         final float centerY = mTile.getHeight() / 2.0f;
@@ -129,9 +167,17 @@ public class QuickSettingsTile implements OnClickListener {
          mTile.startAnimation(rotation);
     }
 
+    boolean enableFlip() {
+        return (Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.ENABLE_FLIP_ANIMATE, 1) == 1);
+    }
+
     @Override
     public final void onClick(View v) {
+        updateHapticFeedbackSetting();
         mOnClick.onClick(v);
+        flipTile();
+        provideHapticFeedback(mClickPattern);
         ContentResolver resolver = mContext.getContentResolver();
         boolean shouldCollapse = Settings.System.getInt(resolver, Settings.System.EXPANDED_HIDE_ONCHANGE, 0) == 1;
         if (shouldCollapse) {
@@ -139,4 +185,13 @@ public class QuickSettingsTile implements OnClickListener {
         }
     }
 
+    private void provideHapticFeedback(long[] pattern) {
+        if (mHapticFeedback && pattern != null) {
+            if (pattern.length == 1) {
+                mVibrator.vibrate(pattern[0]);
+            } else {
+                mVibrator.vibrate(pattern, -1);
+            }
+        }
+    }
 }

@@ -26,7 +26,7 @@ import org.apache.harmony.xnet.provider.jsse.OpenSSLSocketImpl;
 
 import android.app.backup.BackupAgent;
 import android.content.BroadcastReceiver;
-import android.content.ComponentCallbacks;
+import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.Context;
@@ -220,6 +220,10 @@ public final class ActivityThread {
         Configuration createdConfig;
         ActivityClientRecord nextIdle;
 
+        String profileFile;
+        ParcelFileDescriptor profileFd;
+        boolean autoStopProfiler;
+
         ActivityInfo activityInfo;
         LoadedApk packageInfo;
 
@@ -236,6 +240,14 @@ public final class ActivityThread {
             stopped = false;
             hideForNow = false;
             nextIdle = null;
+        }
+
+        public boolean isPreHoneycomb() {
+            if (activity != null) {
+                return activity.getApplicationInfo().targetSdkVersion
+                        < android.os.Build.VERSION_CODES.HONEYCOMB;
+            }
+            return false;	
         }
 
         public String toString() {
@@ -320,6 +332,7 @@ public final class ActivityThread {
 
     private static final class ServiceArgsData {
         IBinder token;
+        boolean taskRemoved;
         int startId;
         int flags;
         Intent args;
@@ -336,6 +349,9 @@ public final class ActivityThread {
         List<ProviderInfo> providers;
         ComponentName instrumentationName;
         String profileFile;
+        ParcelFileDescriptor profileFd;
+        boolean autoStopProfiler;
+        boolean profiling;
         Bundle instrumentationArgs;
         IInstrumentationWatcher instrumentationWatcher;
         int debugMode;
@@ -343,8 +359,60 @@ public final class ActivityThread {
         boolean persistent;
         Configuration config;
         boolean handlingProfiling;
+        Bundle coreSettings;
         public String toString() {
             return "AppBindData{appInfo=" + appInfo + "}";
+        }
+        public void setProfiler(String file, ParcelFileDescriptor fd) {
+            if (profiling) {
+                if (fd != null) {
+                    try {
+                        fd.close();
+                    } catch (IOException e) {
+                    }
+                }
+                return;
+            }
+            if (profileFd != null) {
+                try {
+                    profileFd.close();
+                } catch (IOException e) {
+                }
+            }
+            profileFile = file;
+            profileFd = fd;
+        }
+        public void startProfiling() {
+            if (profileFd == null || profiling) {
+                return;
+            }
+            try {
+                Debug.startMethodTracing(profileFile, profileFd.getFileDescriptor(),
+                        8 * 1024 * 1024, 0);
+                profiling = true;
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "Profiling failed on path " + profileFile);
+                try {
+                    profileFd.close();
+                    profileFd = null;
+                } catch (IOException e2) {
+                    Slog.w(TAG, "Failure closing profile fd", e2);
+                }
+            }
+        }
+        public void stopProfiling() {
+            if (profiling) {
+                profiling = false;
+                Debug.stopMethodTracing();
+                if (profileFd != null) {
+                    try {
+                        profileFd.close();
+                    } catch (IOException e) {
+                    }
+                }
+                profileFd = null;
+                profileFile = null;
+            }
         }
     }
 
@@ -406,6 +474,10 @@ public final class ActivityThread {
                 token);
         }
 
+        public final void scheduleSleeping(IBinder token, boolean sleeping) {
+            queueOrSendMessage(H.SLEEPING, token, sleeping ? 1 : 0);
+        }
+
         public final void scheduleResumeActivity(IBinder token, boolean isForward) {
             queueOrSendMessage(H.RESUME_ACTIVITY, token, isForward ? 1 : 0);
         }
@@ -421,7 +493,8 @@ public final class ActivityThread {
         // activity itself back to the activity manager. (matters more with ipc)
         public final void scheduleLaunchActivity(Intent intent, IBinder token, int ident,
                 ActivityInfo info, Bundle state, List<ResultInfo> pendingResults,
-                List<Intent> pendingNewIntents, boolean notResumed, boolean isForward) {
+                List<Intent> pendingNewIntents, boolean notResumed, boolean isForward,
+                String profileName, ParcelFileDescriptor profileFd, boolean autoStopProfiler) {
             ActivityClientRecord r = new ActivityClientRecord();
 
             r.token = token;
@@ -435,6 +508,10 @@ public final class ActivityThread {
 
             r.startsNotResumed = notResumed;
             r.isForward = isForward;
+
+            r.profileFile = profileName;
+            r.profileFd = profileFd;
+            r.autoStopProfiler = autoStopProfiler;
 
             queueOrSendMessage(H.LAUNCH_ACTIVITY, r);
         }
@@ -527,10 +604,11 @@ public final class ActivityThread {
             queueOrSendMessage(H.UNBIND_SERVICE, s);
         }
 
-        public final void scheduleServiceArgs(IBinder token, int startId,
+        public final void scheduleServiceArgs(IBinder token, boolean taskRemoved, int startId,
             int flags ,Intent args) {
             ServiceArgsData s = new ServiceArgsData();
             s.token = token;
+            s.taskRemoved = taskRemoved;
             s.startId = startId;
             s.flags = flags;
             s.args = args;
@@ -545,9 +623,10 @@ public final class ActivityThread {
         public final void bindApplication(String processName,
                 ApplicationInfo appInfo, List<ProviderInfo> providers,
                 ComponentName instrumentationName, String profileFile,
+                ParcelFileDescriptor profileFd, boolean autoStopProfiler,
                 Bundle instrumentationArgs, IInstrumentationWatcher instrumentationWatcher,
                 int debugMode, boolean isRestrictedBackupMode, boolean persistent, Configuration config,
-                Map<String, IBinder> services) {
+                Map<String, IBinder> services, Bundle coreSettings) {
 
             if (services != null) {
                 // Setup the service cache in the ServiceManager
@@ -559,13 +638,15 @@ public final class ActivityThread {
             data.appInfo = appInfo;
             data.providers = providers;
             data.instrumentationName = instrumentationName;
-            data.profileFile = profileFile;
+            data.setProfiler(profileFile, profileFd);
+            data.autoStopProfiler = false;
             data.instrumentationArgs = instrumentationArgs;
             data.instrumentationWatcher = instrumentationWatcher;
             data.debugMode = debugMode;
             data.restrictedBackupMode = isRestrictedBackupMode;
             data.persistent = persistent;
             data.config = config;
+            data.coreSettings = coreSettings;
             queueOrSendMessage(H.BIND_APPLICATION, data);
         }
 
@@ -636,11 +717,12 @@ public final class ActivityThread {
             queueOrSendMessage(H.ACTIVITY_CONFIGURATION_CHANGED, token);
         }
 
-        public void profilerControl(boolean start, String path, ParcelFileDescriptor fd) {
+        public void profilerControl(boolean start, String path, ParcelFileDescriptor fd,
+                int profileType) {
             ProfilerControlData pcd = new ProfilerControlData();
             pcd.path = path;
             pcd.fd = fd;
-            queueOrSendMessage(H.PROFILER_CONTROL, pcd, start ? 1 : 0);
+            queueOrSendMessage(H.PROFILER_CONTROL, pcd, start ? 1 : 0, profileType);
         }
 
         public void setSchedulingGroup(int group) {
@@ -851,6 +933,14 @@ public final class ActivityThread {
         private void printRow(PrintWriter pw, String format, Object...objs) {
             pw.println(String.format(format, objs));
         }
+
+        public void setCoreSettings(Bundle settings) {
+            queueOrSendMessage(H.SET_CORE_SETTINGS, settings);
+        }
+
+        public void scheduleTrimMemory(int level) {
+            queueOrSendMessage(H.TRIM_MEMORY, null, level);
+        }
     }
 
     private final class H extends Handler {
@@ -889,6 +979,9 @@ public final class ActivityThread {
         public static final int ENABLE_JIT              = 132;
         public static final int DISPATCH_PACKAGE_BROADCAST = 133;
         public static final int SCHEDULE_CRASH          = 134;
+        public static final int SLEEPING                = 135;
+        public static final int SET_CORE_SETTINGS       = 136;
+        public static final int TRIM_MEMORY             = 137;
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
                 switch (code) {
@@ -927,6 +1020,9 @@ public final class ActivityThread {
                     case ENABLE_JIT: return "ENABLE_JIT";
                     case DISPATCH_PACKAGE_BROADCAST: return "DISPATCH_PACKAGE_BROADCAST";
                     case SCHEDULE_CRASH: return "SCHEDULE_CRASH";
+                    case SLEEPING: return "SLEEPING";
+                    case SET_CORE_SETTINGS: return "SET_CORE_SETTINGS";
+                    case TRIM_MEMORY: return "TRIM_MEMORY";
                 }
             }
             return "(unknown)";
@@ -1031,7 +1127,7 @@ public final class ActivityThread {
                     handleActivityConfigurationChanged((IBinder)msg.obj);
                     break;
                 case PROFILER_CONTROL:
-                    handleProfilerControl(msg.arg1 != 0, (ProfilerControlData)msg.obj);
+                    handleProfilerControl(msg.arg1 != 0, (ProfilerControlData)msg.obj, msg.arg2);
                     break;
                 case CREATE_BACKUP_AGENT:
                     handleCreateBackupAgent((CreateBackupAgentData)msg.obj);
@@ -1053,6 +1149,15 @@ public final class ActivityThread {
                     break;
                 case SCHEDULE_CRASH:
                     throw new RemoteServiceException((String)msg.obj);
+                case SLEEPING:
+                    handleSleeping((IBinder)msg.obj, msg.arg1 != 0);
+                    break;
+                case SET_CORE_SETTINGS:
+                    handleSetCoreSettings((Bundle) msg.obj);
+                    break;
+                case TRIM_MEMORY:
+                    handleTrimMemory(msg.arg1);
+                    break;
             }
             if (DEBUG_MESSAGES) Slog.v(TAG, "<<< done: " + msg.what);
         }
@@ -1068,6 +1173,10 @@ public final class ActivityThread {
     private final class Idler implements MessageQueue.IdleHandler {
         public final boolean queueIdle() {
             ActivityClientRecord a = mNewActivities;
+            boolean stopProfiling = false;
+            if (mBoundApplication.profileFd != null && mBoundApplication.autoStopProfiler) {
+                stopProfiling = true;
+            }
             if (a != null) {
                 mNewActivities = null;
                 IActivityManager am = ActivityManagerNative.getDefault();
@@ -1079,7 +1188,7 @@ public final class ActivityThread {
                         (a.activity != null ? a.activity.mFinished : false));
                     if (a.activity != null && !a.activity.mFinished) {
                         try {
-                            am.activityIdle(a.token, a.createdConfig);
+                            am.activityIdle(a.token, a.createdConfig, stopProfiling);
                             a.createdConfig = null;
                         } catch (RemoteException ex) {
                         }
@@ -1088,6 +1197,9 @@ public final class ActivityThread {
                     a = a.nextIdle;
                     prev.nextIdle = null;
                 } while (a != null);
+            }
+            if (stopProfiling) {
+                mBoundApplication.stopProfiling();
             }
             ensureJitEnabled();
             return false;
@@ -1512,7 +1624,8 @@ public final class ActivityThread {
     }
 
     public boolean isProfiling() {
-        return mBoundApplication != null && mBoundApplication.profileFile != null;
+        return mBoundApplication != null && mBoundApplication.profileFile != null
+                && mBoundApplication.profileFd == null;
     }
 
     public String getProfileFilePath() {
@@ -1829,6 +1942,13 @@ public final class ActivityThread {
         // If we are getting ready to gc after going to the background, well
         // we are back active so skip it.
         unscheduleGcIdler();
+
+        Slog.i(TAG, "Launch: profileFd=" + r.profileFile + " stop=" + r.autoStopProfiler);
+        if (r.profileFd != null) {
+            mBoundApplication.setProfiler(r.profileFile, r.profileFd);
+            mBoundApplication.startProfiling();
+            mBoundApplication.autoStopProfiler = r.autoStopProfiler;
+        }
 
         if (localLOGV) Slog.v(
             TAG, "Handling launch of " + r);
@@ -2208,7 +2328,13 @@ public final class ActivityThread {
                 if (data.args != null) {
                     data.args.setExtrasClassLoader(s.getClassLoader());
                 }
-                int res = s.onStartCommand(data.args, data.flags, data.startId);
+                int res;
+                if (!data.taskRemoved) {
+                    res = s.onStartCommand(data.args, data.flags, data.startId);
+                } else {
+                    s.onTaskRemoved(data.args);
+                    res = Service.START_TASK_REMOVED_COMPLETE;
+                }
 
                 QueuedWork.waitToFinish();
 
@@ -2460,14 +2586,14 @@ public final class ActivityThread {
             }
 
             r.activity.mConfigChangeFlags |= configChanges;
-            Bundle state = performPauseActivity(token, finished, true);
+            performPauseActivity(token, finished, r.isPreHoneycomb());
 
             // Make sure any pending writes are now committed.
             QueuedWork.waitToFinish();
             
             // Tell the activity manager we have paused.
             try {
-                ActivityManagerNative.getDefault().activityPaused(token, state);
+                ActivityManagerNative.getDefault().activityPaused(token);
             } catch (RemoteException ex) {
             }
         }
@@ -2507,6 +2633,8 @@ public final class ActivityThread {
                 state = new Bundle();
                 mInstrumentation.callActivityOnSaveInstanceState(r.activity, state);
                 r.state = state;
+            } else {
+                r.state = null;
             }
             // Now we are idle.
             r.activity.mCalled = false;
@@ -2544,9 +2672,9 @@ public final class ActivityThread {
         return state;
     }
 
-    final void performStopActivity(IBinder token) {
+    final void performStopActivity(IBinder token, boolean saveState) {
         ActivityClientRecord r = mActivities.get(token);
-        performStopActivityInner(r, null, false);
+        performStopActivityInner(r, null, false, saveState);
     }
 
     private static class StopInfo {
@@ -2561,9 +2689,18 @@ public final class ActivityThread {
         }
     }
 
+    /**
+     * Core implementation of stopping an activity.  Note this is a little
+     * tricky because the server's meaning of stop is slightly different
+     * than our client -- for the server, stop means to save state and give
+     * it the result when it is done, but the window may still be visible.
+     * For the client, we want to call onStop()/onStart() to indicate when
+     * the activity's UI visibillity changes.
+     */
     private final void performStopActivityInner(ActivityClientRecord r,
-            StopInfo info, boolean keepShown) {
+            StopInfo info, boolean keepShown, boolean saveState) {
         if (localLOGV) Slog.v(TAG, "Performing stop of " + r);
+        Bundle state = null;
         if (r != null) {
             if (!keepShown && r.stopped) {
                 if (r.activity.mFinished) {
@@ -2607,6 +2744,17 @@ public final class ActivityThread {
                         Log.e("BigThumbnailAddon", e.toString());
                     }
                 }
+
+            // Next have the activity save its current state and managed dialogs...
+            if (!r.activity.mFinished && saveState) {
+                if (r.state == null) {
+                    state = new Bundle();
+                    mInstrumentation.callActivityOnSaveInstanceState(r.activity, state);
+                    r.state = state;
+                } else {
+                    state = r.state;
+                }
+            }
 
             if (!keepShown) {
                 try {
@@ -2659,7 +2807,7 @@ public final class ActivityThread {
         r.activity.mConfigChangeFlags |= configChanges;
 
         StopInfo info = new StopInfo();
-        performStopActivityInner(r, info, show);
+        performStopActivityInner(r, info, show, true);
 
         if (localLOGV) Slog.v(
             TAG, "Finishing stop of " + r + ": show=" + show
@@ -2670,7 +2818,7 @@ public final class ActivityThread {
         // Tell activity manager we have been stopped.
         try {
             ActivityManagerNative.getDefault().activityStopped(
-                r.token, info.thumbnail, info.description);
+                r.token, r.state, info.thumbnail, info.description);
         } catch (RemoteException ex) {
         }
     }
@@ -2686,7 +2834,7 @@ public final class ActivityThread {
     private final void handleWindowVisibility(IBinder token, boolean show) {
         ActivityClientRecord r = mActivities.get(token);
         if (!show && !r.stopped) {
-            performStopActivityInner(r, null, show);
+            performStopActivityInner(r, null, show, false);
         } else if (show && r.stopped) {
             // If we are getting ready to gc after going to the background, well
             // we are back active so skip it.
@@ -2699,6 +2847,50 @@ public final class ActivityThread {
             if (Config.LOGV) Slog.v(
                 TAG, "Handle window " + r + " visibility: " + show);
             updateVisibility(r, show);
+        }
+    }
+
+    private final void handleSleeping(IBinder token, boolean sleeping) {
+        ActivityClientRecord r = mActivities.get(token);
+
+        if (r == null) {
+            Log.w(TAG, "handleWindowVisibility: no activity for token " + token);
+            return;
+        }
+
+        if (sleeping) {
+            if (!r.stopped) {
+                try {
+                    // Now we are idle.
+                    r.activity.performStop();
+                } catch (Exception e) {
+                    if (!mInstrumentation.onException(r.activity, e)) {
+                        throw new RuntimeException(
+                                "Unable to stop activity "
+                                + r.intent.getComponent().toShortString()
+                                + ": " + e.toString(), e);
+                    }
+                }
+                r.stopped = true;
+            }
+            // Tell activity manager we slept.
+            try {
+                ActivityManagerNative.getDefault().activitySlept(r.token);
+            } catch (RemoteException ex) {
+            }
+        } else {
+            if (r.stopped && r.activity.mVisibleFromServer) {
+                r.activity.performRestart();
+                r.stopped = false;
+            }
+        }
+    }
+
+    private void handleSetCoreSettings(Bundle coreSettings) {
+        if (mBoundApplication != null) {
+            synchronized (mBoundApplication) {
+                mBoundApplication.coreSettings = coreSettings;
+            }
         }
     }
 
@@ -2987,7 +3179,7 @@ public final class ActivityThread {
 
         Bundle savedState = null;
         if (!r.paused) {
-            savedState = performPauseActivity(r.token, false, true);
+            savedState = performPauseActivity(r.token, false, r.isPreHoneycomb());
         }
 
         handleDestroyActivity(r.token, false, configChanges, true);
@@ -3041,10 +3233,10 @@ public final class ActivityThread {
         }
     }
 
-    ArrayList<ComponentCallbacks> collectComponentCallbacksLocked(
+    ArrayList<ComponentCallbacks2> collectComponentCallbacksLocked(
             boolean allActivities, Configuration newConfig) {
-        ArrayList<ComponentCallbacks> callbacks
-                = new ArrayList<ComponentCallbacks>();
+        ArrayList<ComponentCallbacks2> callbacks
+                = new ArrayList<ComponentCallbacks2>();
 
         if (mActivities.size() > 0) {
             Iterator<ActivityClientRecord> it = mActivities.values().iterator();
@@ -3093,9 +3285,9 @@ public final class ActivityThread {
     }
 
     private final void performConfigurationChanged(
-            ComponentCallbacks cb, Configuration config) {
+            ComponentCallbacks2 cb, Configuration config) {
         // Only for Activity objects, check that they actually call up to their
-        // superclass implementation.  ComponentCallbacks is an interface, so
+        // superclass implementation.  ComponentCallbacks2 is an interface, so
         // we check the runtime type and act accordingly.
         Activity activity = (cb instanceof Activity) ? (Activity) cb : null;
         if (activity != null) {
@@ -3208,7 +3400,7 @@ public final class ActivityThread {
     
     final void handleConfigurationChanged(Configuration config) {
 
-        ArrayList<ComponentCallbacks> callbacks = null;
+        ArrayList<ComponentCallbacks2> callbacks = null;
 
         int diff = 0;
 
@@ -3240,7 +3432,7 @@ public final class ActivityThread {
         if (callbacks != null) {
             final int N = callbacks.size();
             for (int i=0; i<N; i++) {
-                ComponentCallbacks cb = callbacks.get(i);
+                ComponentCallbacks2 cb = callbacks.get(i);
 
                 // We removed the old resources object from the mActiveResources
                 // cache, now we need to trigger an update for each application.
@@ -3270,11 +3462,19 @@ public final class ActivityThread {
         performConfigurationChanged(r.activity, mConfiguration);
     }
 
-    final void handleProfilerControl(boolean start, ProfilerControlData pcd) {
+    final void handleProfilerControl(boolean start, ProfilerControlData pcd, int profileType) {
         if (start) {
             try {
-                Debug.startMethodTracing(pcd.path, pcd.fd.getFileDescriptor(),
-                        8 * 1024 * 1024, 0);
+                switch (profileType) {
+                    case 1:
+                        ViewDebug.startLooperProfiling(pcd.path, pcd.fd.getFileDescriptor());
+                        break;
+                    default:
+                        mBoundApplication.setProfiler(pcd.path, pcd.fd);
+                        mBoundApplication.autoStopProfiler = false;
+                        mBoundApplication.startProfiling();
+                        break;
+                }
             } catch (RuntimeException e) {
                 Slog.w(TAG, "Profiling failed on path " + pcd.path
                         + " -- can the process access this path?");
@@ -3286,7 +3486,14 @@ public final class ActivityThread {
                 }
             }
         } else {
-            Debug.stopMethodTracing();
+            switch (profileType) {
+                case 1:
+                    ViewDebug.stopLooperProfiling();
+                    break;
+                default:
+                    mBoundApplication.stopProfiling();
+                    break;
+            }
         }
     }
 
@@ -3316,8 +3523,8 @@ public final class ActivityThread {
     }
         
     final void handleLowMemory() {
-        ArrayList<ComponentCallbacks> callbacks
-                = new ArrayList<ComponentCallbacks>();
+        ArrayList<ComponentCallbacks2> callbacks
+                = new ArrayList<ComponentCallbacks2>();
 
         synchronized (mPackages) {
             callbacks = collectComponentCallbacksLocked(true, null);
@@ -3340,6 +3547,19 @@ public final class ActivityThread {
         BinderInternal.forceGc("mem");
     }
 
+    final void handleTrimMemory(int level) {
+        ArrayList<ComponentCallbacks2> callbacks;
+
+        synchronized (mPackages) {
+            callbacks = collectComponentCallbacksLocked(true, null);
+        }
+
+        final int N = callbacks.size();
+        for (int i=0; i<N; i++) {
+            callbacks.get(i).onTrimMemory(level);
+        }
+    }
+
     private final void handleBindApplication(AppBindData data) {
         mBoundApplication = data;
         mConfiguration = new Configuration(data.config);
@@ -3347,6 +3567,10 @@ public final class ActivityThread {
         // send up app name; do this *before* waiting for debugger
         Process.setArgV0(data.processName);
         android.ddm.DdmHandleAppName.setAppName(data.processName);
+
+        if (data.profileFd != null) {
+            data.startProfiling();
+        }
 
         /*
          * Before spawning a new process, reset the time zone to be the system time zone.
@@ -3466,7 +3690,8 @@ public final class ActivityThread {
             mInstrumentation.init(this, instrContext, appContext,
                     new ComponentName(ii.packageName, ii.name), data.instrumentationWatcher);
 
-            if (data.profileFile != null && !ii.handleProfiling) {
+            if (data.profileFile != null && !ii.handleProfiling
+                    && data.profileFd == null) {
                 data.handlingProfiling = true;
                 File file = new File(data.profileFile);
                 file.getParentFile().mkdirs();
@@ -3512,7 +3737,8 @@ public final class ActivityThread {
 
     /*package*/ final void finishInstrumentation(int resultCode, Bundle results) {
         IActivityManager am = ActivityManagerNative.getDefault();
-        if (mBoundApplication.profileFile != null && mBoundApplication.handlingProfiling) {
+        if (mBoundApplication.profileFile != null && mBoundApplication.handlingProfiling
+                && mBoundApplication.profileFd == null) {
             Debug.stopMethodTracing();
         }
         //Slog.i(TAG, "am: " + ActivityManagerNative.getDefault()
@@ -3852,7 +4078,7 @@ public final class ActivityThread {
             }
         }
         
-        ViewRoot.addConfigCallback(new ComponentCallbacks() {
+        ViewRoot.addConfigCallback(new ComponentCallbacks2() {
             public void onConfigurationChanged(Configuration newConfig) {
                 synchronized (mPackages) {
                     // We need to apply this change to the resources
@@ -3872,6 +4098,8 @@ public final class ActivityThread {
             }
             public void onLowMemory() {
             }
+            public void onTrimMemory(int level) {
+            }
         });
     }
 
@@ -3890,6 +4118,20 @@ public final class ActivityThread {
         if (providers != null) {
             installContentProviders(mInitialApplication,
                                     (List<ProviderInfo>)providers);
+        }
+    }
+
+    public int getIntCoreSetting(String key, int defaultValue) {
+        if (mBoundApplication == null) {
+            return defaultValue;
+        }
+        synchronized (mBoundApplication) {
+            Bundle coreSettings = mBoundApplication.coreSettings;
+            if (coreSettings != null) {
+                return coreSettings.getInt(key, defaultValue);
+            } else {
+                return defaultValue;
+            }
         }
     }
 

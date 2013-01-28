@@ -32,6 +32,8 @@ interface IStatusBarService
     void removeIcon(String slot);
     void setIMEVisible(boolean visible);
     void showNaviBar(boolean visible);
+    void toggleQwikWidgets();
+    void toggleRingPanel();
 
     // ---- Methods below are for use by the status bar policy services ----
     // You need the STATUS_BAR_SERVICE permission

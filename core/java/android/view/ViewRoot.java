@@ -1496,13 +1496,25 @@ public final class ViewRoot extends Handler implements ViewParent, ViewOpacityMa
                 canvas.setDensity(mDensity);
             } catch (Surface.OutOfResourcesException e) {
                 Log.e(TAG, "OutOfResourcesException locking surface", e);
-                // TODO: we should ask the window manager to do something!
-                // for now we just do nothing
+                try {
+                    if (!sWindowSession.outOfMemory(mWindow)) {
+                        Slog.w(TAG, "No processes killed for memory; killing self");
+                        Process.killProcess(Process.myPid());
+                    }
+                } catch (RemoteException ex) {
+                }
+                mLayoutRequested = true;    // ask wm for a new surface next time.
                 return;
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "IllegalArgumentException locking surface", e);
-                // TODO: we should ask the window manager to do something!
-                // for now we just do nothing
+                try {
+                    if (!sWindowSession.outOfMemory(mWindow)) {
+                        Slog.w(TAG, "No processes killed for memory; killing self");
+                        Process.killProcess(Process.myPid());
+                    }
+                } catch (RemoteException ex) {
+                }
+                mLayoutRequested = true;    // ask wm for a new surface next time.
                 return;
             }
 
@@ -1871,6 +1883,43 @@ public final class ViewRoot extends Handler implements ViewParent, ViewOpacityMa
     public final static int FINISH_INPUT_CONNECTION = 1012;
     public final static int CHECK_FOCUS = 1013;
     public final static int CLOSE_SYSTEM_DIALOGS = 1014;
+
+    @Override
+    public String getMessageName(Message message) {
+        switch (message.what) {
+            case DO_TRAVERSAL:
+                return "DO_TRAVERSAL";
+            case DIE:
+                return "DIE";
+            case RESIZED:
+                return "RESIZED";
+            case RESIZED_REPORT:
+                return "RESIZED_REPORT";
+            case WINDOW_FOCUS_CHANGED:
+                return "WINDOW_FOCUS_CHANGED";
+            case DISPATCH_KEY:
+                return "DISPATCH_KEY";
+            case DISPATCH_POINTER:
+                return "DISPATCH_POINTER";
+            case DISPATCH_TRACKBALL:
+                return "DISPATCH_TRACKBALL";
+            case DISPATCH_APP_VISIBILITY:
+                return "DISPATCH_APP_VISIBILITY";
+            case DISPATCH_GET_NEW_SURFACE:
+                return "DISPATCH_GET_NEW_SURFACE";
+            case FINISHED_EVENT:
+                return "FINISHED_EVENT";
+            case DISPATCH_KEY_FROM_IME:
+                return "DISPATCH_KEY_FROM_IME";
+            case FINISH_INPUT_CONNECTION:
+                return "FINISH_INPUT_CONNECTION";
+            case CHECK_FOCUS:
+                return "CHECK_FOCUS";
+            case CLOSE_SYSTEM_DIALOGS:
+                return "CLOSE_SYSTEM_DIALOGS";
+        }
+        return super.getMessageName(message);
+    }
 
     @Override
     public void handleMessage(Message msg) {

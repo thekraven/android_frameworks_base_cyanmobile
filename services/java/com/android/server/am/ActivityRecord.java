@@ -19,6 +19,7 @@ package com.android.server.am;
 import com.android.server.AttributeCache;
 import com.android.server.am.ActivityStack.ActivityState;
 
+import com.android.internal.app.ResolverActivity;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -27,6 +28,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
@@ -45,9 +47,10 @@ import java.util.HashSet;
 /**
  * An entry in the history stack, representing an activity.
  */
-class ActivityRecord extends IApplicationToken.Stub {
+class ActivityRecord {
     final ActivityManagerService service; // owner
     final ActivityStack stack; // owner
+    final IApplicationToken.Stub appToken; // window manager token
     final ActivityInfo info; // all about me
     final int launchedFromUid; // always the uid who started the activity.
     final Intent intent;    // the original intent that generated us
@@ -71,6 +74,7 @@ class ActivityRecord extends IApplicationToken.Stub {
     TaskRecord task;        // the task this is in.
     long launchTime;        // when we starting launching this activity
     long startTime;         // last time this activity was started
+    long lastVisibleTime;   // last time this activity became visible
     long cpuTimeAtResume;   // the cpu time of host process at the time of resuming activity
     Configuration configuration; // configuration activity was last running in
     ActivityRecord resultTo; // who started this entry, so will get our reply
@@ -95,9 +99,9 @@ class ActivityRecord extends IApplicationToken.Stub {
     boolean configDestroy;  // need to destroy due to config change?
     int configChangeFlags;  // which config values have changed
     boolean keysPaused;     // has key dispatching been paused for it?
-    boolean inHistory;      // are we in the history stack?
     int launchMode;         // the launch mode activity attribute.
     boolean visible;        // does this activity's window need to be shown?
+    boolean sleeping;       // have we told the activity to sleep?
     boolean waitingVisible; // true if waiting for a new act to become vis
     boolean nowVisible;     // is this activity's window visible?
     boolean thumbnailNeeded;// has someone requested a thumbnail?
@@ -106,14 +110,16 @@ class ActivityRecord extends IApplicationToken.Stub {
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
 
     String stringName;      // for caching of toString().
-    
+
+    private boolean inHistory;  // are we in the history stack?
+
     void dump(PrintWriter pw, String prefix) {
         final long now = SystemClock.uptimeMillis();
         pw.print(prefix); pw.print("packageName="); pw.print(packageName);
                 pw.print(" processName="); pw.println(processName);
         pw.print(prefix); pw.print("launchedFromUid="); pw.print(launchedFromUid);
                 pw.print(" app="); pw.println(app);
-        pw.print(prefix); pw.println(intent);
+        pw.print(prefix); pw.println(intent.toInsecureString());
         pw.print(prefix); pw.print("frontOfTask="); pw.print(frontOfTask);
                 pw.print(" task="); pw.println(task);
         pw.print(prefix); pw.print("taskAffinity="); pw.println(taskAffinity);
@@ -185,9 +191,10 @@ class ActivityRecord extends IApplicationToken.Stub {
                 pw.print(" launchMode="); pw.println(launchMode);
         pw.print(prefix); pw.print("fullscreen="); pw.print(fullscreen);
                 pw.print(" visible="); pw.print(visible);
-                pw.print(" frozenBeforeDestroy="); pw.print(frozenBeforeDestroy);
-                pw.print(" thumbnailNeeded="); pw.print(thumbnailNeeded);
+                pw.print(" sleeping="); pw.print(sleeping);
                 pw.print(" idle="); pw.println(idle);
+        pw.print(prefix); pw.print("frozenBeforeDestroy="); pw.print(frozenBeforeDestroy);
+                pw.print(" thumbnailNeeded="); pw.println(thumbnailNeeded);
         if (launchTime != 0 || startTime != 0) {
             pw.print(prefix); pw.print("launchTime=");
                     if (launchTime == 0) pw.print("0");
@@ -211,6 +218,70 @@ class ActivityRecord extends IApplicationToken.Stub {
         }
     }
 
+    static class Token extends IApplicationToken.Stub {
+        final WeakReference<ActivityRecord> weakActivity;
+
+        Token(ActivityRecord activity) {
+            weakActivity = new WeakReference<ActivityRecord>(activity);
+        }
+
+        @Override public void windowsDrawn() throws RemoteException {
+            ActivityRecord activity = weakActivity.get();
+            if (activity != null) {
+                activity.windowsDrawn();
+            }
+        }
+
+        @Override public void windowsVisible() throws RemoteException {
+            ActivityRecord activity = weakActivity.get();
+            if (activity != null) {
+                activity.windowsVisible();
+            }
+        }
+
+        @Override public void windowsGone() throws RemoteException {
+            ActivityRecord activity = weakActivity.get();
+            if (activity != null) {
+                activity.windowsGone();
+            }
+        }
+
+        @Override public boolean keyDispatchingTimedOut() throws RemoteException {
+            ActivityRecord activity = weakActivity.get();
+            if (activity != null) {
+                return activity.keyDispatchingTimedOut();
+            }
+            return false;
+        }
+
+        @Override public long getKeyDispatchingTimeout() throws RemoteException {
+            ActivityRecord activity = weakActivity.get();
+            if (activity != null) {
+                return activity.getKeyDispatchingTimeout();
+            }
+            return 0;
+        }
+
+        public String toString() {
+            StringBuilder sb = new StringBuilder(128);
+            sb.append("Token{");
+            sb.append(Integer.toHexString(System.identityHashCode(this)));
+            sb.append(' ');
+            sb.append(weakActivity.get());
+            sb.append('}');
+            return sb.toString();
+        }
+    }
+
+    static ActivityRecord forToken(IBinder token) {
+        try {
+            return token != null ? ((Token)token).weakActivity.get() : null;
+        } catch (ClassCastException e) {
+            //Slog.w(ActivityManagerService.TAG, "Bad activity token: " + token, e);
+            return null;
+        }
+    }
+
     ActivityRecord(ActivityManagerService _service, ActivityStack _stack, ProcessRecord _caller,
             int _launchedFromUid, Intent _intent, String _resolvedType,
             ActivityInfo aInfo, Configuration _configuration,
@@ -218,6 +289,7 @@ class ActivityRecord extends IApplicationToken.Stub {
             boolean _componentSpecified) {
         service = _service;
         stack = _stack;
+        appToken = new Token(this);
         info = aInfo;
         launchedFromUid = _launchedFromUid;
         intent = _intent;
@@ -303,7 +375,7 @@ class ActivityRecord extends IApplicationToken.Stub {
                         _intent.getData() == null &&
                         _intent.getType() == null &&
                         (intent.getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) != 0 &&
-                        !"android".equals(realActivity.getClassName())) {
+                        !ResolverActivity.class.getName().equals(realActivity.getClassName())) {
                     // This sure looks like a home activity!
                     // Note the last check is so we don't count the resolver
                     // activity as being home...  really, we don't care about
@@ -330,10 +402,44 @@ class ActivityRecord extends IApplicationToken.Stub {
         }
     }
 
+    void setTask(TaskRecord newTask, boolean isRoot) {
+        if (inHistory && !finishing) {
+            if (task != null) {
+                task.numActivities--;
+            }
+            if (newTask != null) {
+                newTask.numActivities++;
+            }
+        }
+        task = newTask;
+    }
+
+    void putInHistory() {
+        if (!inHistory) {
+            inHistory = true;
+            if (task != null && !finishing) {
+                task.numActivities++;
+            }
+        }
+    }
+
+    void takeFromHistory() {
+        if (inHistory) {
+            inHistory = false;
+            if (task != null && !finishing) {
+                task.numActivities--;
+            }
+        }
+    }
+
+    boolean isInHistory() {
+        return inHistory;
+    }
+
     void makeFinishing() {
         if (!finishing) {
             finishing = true;
-            if (task != null) {
+            if (task != null && inHistory) {
                 task.numActivities--;
             }
         }
@@ -402,7 +508,7 @@ class ActivityRecord extends IApplicationToken.Stub {
                 ar.add(intent);
                 service.grantUriPermissionFromIntentLocked(callingUid, packageName,
                         intent, getUriPermissionsLocked());
-                app.thread.scheduleNewIntent(ar, this);
+                app.thread.scheduleNewIntent(ar, appToken);
                 sent = true;
             } catch (RemoteException e) {
                 Slog.w(ActivityManagerService.TAG,
@@ -427,14 +533,14 @@ class ActivityRecord extends IApplicationToken.Stub {
     void pauseKeyDispatchingLocked() {
         if (!keysPaused) {
             keysPaused = true;
-            service.mWindowManager.pauseKeyDispatching(this);
+            service.mWindowManager.pauseKeyDispatching(appToken);
         }
     }
 
     void resumeKeyDispatchingLocked() {
         if (keysPaused) {
             keysPaused = false;
-            service.mWindowManager.resumeKeyDispatching(this);
+            service.mWindowManager.resumeKeyDispatching(appToken);
         }
     }
 
@@ -450,18 +556,18 @@ class ActivityRecord extends IApplicationToken.Stub {
     
     public void startFreezingScreenLocked(ProcessRecord app, int configChanges) {
         if (mayFreezeScreenLocked(app)) {
-            service.mWindowManager.startAppFreezingScreen(this, configChanges);
+            service.mWindowManager.startAppFreezingScreen(appToken, configChanges);
         }
     }
     
     public void stopFreezingScreenLocked(boolean force) {
         if (force || frozenBeforeDestroy) {
             frozenBeforeDestroy = false;
-            service.mWindowManager.stopAppFreezingScreen(this, force);
+            service.mWindowManager.stopAppFreezingScreen(appToken, force);
         }
     }
     
-    public void windowsVisible() {
+    public void windowsDrawn() {
         synchronized(service) {
             if (launchTime != 0) {
                 final long curTime = SystemClock.uptimeMillis();
@@ -493,11 +599,17 @@ class ActivityRecord extends IApplicationToken.Stub {
                 stack.mInitialStartTime = 0;
             }
             startTime = 0;
+         }
+    }
+
+    public void windowsVisible() {
+        synchronized(service) {
             stack.reportActivityVisibleLocked(this);
             if (ActivityManagerService.DEBUG_SWITCH) Log.v(
                     ActivityManagerService.TAG, "windowsVisible(): " + this);
             if (!nowVisible) {
                 nowVisible = true;
+                lastVisibleTime = SystemClock.uptimeMillis();
                 if (!idle) {
                     // Instead of doing the full stop routine here, let's just
                     // hide any activities we now can, and let them stop when
@@ -612,8 +724,26 @@ class ActivityRecord extends IApplicationToken.Stub {
     public boolean isInterestingToUserLocked() {
         return visible || nowVisible || state == ActivityState.PAUSING || 
                 state == ActivityState.RESUMED;
-     }
-    
+    }
+
+    public void setSleeping(boolean _sleeping) {
+        if (sleeping == _sleeping) {
+            return;
+        }
+        if (app != null && app.thread != null) {
+            try {
+                app.thread.scheduleSleeping(appToken, _sleeping);
+                if (sleeping && !stack.mGoingToSleepActivities.contains(this)) {
+                    stack.mGoingToSleepActivities.add(this);
+                }
+                sleeping = _sleeping;
+            } catch (RemoteException e) {
+                Slog.w(ActivityStack.TAG, "Exception thrown when sleeping: "
+                        + intent.getComponent(), e);
+            }
+        }
+    }
+
     public String toString() {
         if (stringName != null) {
             return stringName;

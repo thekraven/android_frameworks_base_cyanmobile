@@ -68,6 +68,24 @@
         <item name="android:singleLine">true</item>
     </style>
 
+    <style name="TextAppearance.StatusBar.Expanded.MemInfo">
+        <item name="android:textSize">12dp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@*android:color/color_default_cyanmobile</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:fadingEdge">horizontal</item>
+    </style>
+
+    <style name="TextAppearance.StatusBar.Expanded.Intruder">
+        <item name="android:textSize">14dp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@*android:color/color_default_cyanmobile</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:fadingEdge">horizontal</item>
+    </style>
+
     <style name="TextAppearance.StatusBar.IntruderAlert"
         parent="@android:style/TextAppearance.StatusBar">
     </style>

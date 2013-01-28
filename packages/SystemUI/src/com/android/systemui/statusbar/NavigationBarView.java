@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar;
 
+import com.android.internal.statusbar.IStatusBarService;
 import java.net.URISyntaxException;
 import android.content.Context;
 import android.content.Intent;
@@ -34,6 +35,7 @@ import android.util.AttributeSet;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.IWindowManager;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -96,6 +98,11 @@ public class NavigationBarView extends LinearLayout {
     private static final int ID_SCREENSHOT = 29;
     private static final int ID_POWERMENU = 30;
 
+    private static final int SWIPE_MIN_DISTANCE = 150;
+    private static final int SWIPE_MAX_OFF_PATH = 100;
+    private static final int SWIPE_THRESHOLD_VELOCITY = 100;
+    private GestureDetector mGestureDetector;
+
     View mNaviBackground;
     View mNaviAdd;
     ViewGroup mSoftButtons;
@@ -108,6 +115,8 @@ public class NavigationBarView extends LinearLayout {
     ImageButton mQuickButton;
 
     private int mNVColor;
+    private int mNext;
+    private int mPrevious;
     private int mNVTrans;
     private boolean mNVShow;
     private boolean mShowNV;
@@ -160,6 +169,7 @@ public class NavigationBarView extends LinearLayout {
     boolean mForceRotate = false;
     private boolean mDisableAnimate = false;
     Handler mHandler;
+    IStatusBarService mStatusBarService;
 
     class SettingsObserver extends ContentObserver {
         SettingsObserver(Handler handler) {
@@ -190,6 +200,10 @@ public class NavigationBarView extends LinearLayout {
                     Settings.System.getUriFor(Settings.System.ENABLE_OVERICON_COLOR), false, this);
             resolver.registerContentObserver(
                     Settings.System.getUriFor(Settings.System.OVERSCROLL_COLOR), false, this);
+            resolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.WATCH_IS_NEXT), false, this);
+            resolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.WATCH_IS_PREVIOUS), false, this);
             onChange(true);
         }
 
@@ -208,6 +222,8 @@ public class NavigationBarView extends LinearLayout {
             mOverColorEnable = (Settings.System.getInt(resolver, Settings.System.ENABLE_OVERICON_COLOR, 1) == 1);
             mOverColor = Settings.System.getInt(resolver, Settings.System.OVERICON_COLOR, defValuesColor);
             mShowAnimate = Settings.System.getInt(resolver, Settings.System.NAVI_BUTTONS_ANIMATE, 20000);
+            mNext = Settings.System.getInt(resolver, Settings.System.WATCH_IS_NEXT, 0);
+            mPrevious = Settings.System.getInt(resolver, Settings.System.WATCH_IS_PREVIOUS, 1);
             updateNaviButtons();
         }
     }
@@ -215,6 +231,67 @@ public class NavigationBarView extends LinearLayout {
     public NavigationBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
         mDisplay = ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
+        mGestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
+                public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,
+                                       float velocityY) {
+
+                    if (e1==null || e2==null)
+                         return false;
+
+                    float dX = e2.getX()-e1.getX();
+                    float dY = e1.getY()-e2.getY();
+                    if (Math.abs(dY)<SWIPE_MAX_OFF_PATH &&
+                        Math.abs(velocityX)>=SWIPE_THRESHOLD_VELOCITY &&
+                        Math.abs(dX)>=SWIPE_MIN_DISTANCE ) {
+                        if (dX>0) {
+                            mHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                     startExpandActivity();
+                                }
+                            });
+                        } else {
+                            mHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                     startCollapseActivity();
+                                }
+                            });
+                        }
+                        return true;
+                    } else if (Math.abs(dX)<SWIPE_MAX_OFF_PATH &&
+                        Math.abs(velocityY)>=SWIPE_THRESHOLD_VELOCITY &&
+                        Math.abs(dY)>=SWIPE_MIN_DISTANCE ) {
+                        if (dY>0) {
+                            mHandler.post(new Runnable() { public void run() {
+                                 try {
+                                     IStatusBarService statusbar = getStatusBarService();
+                                     if (statusbar != null) {
+                                         statusbar.toggleRingPanel();
+                                     }
+                                     } catch (RemoteException ex) {
+                                         // re-acquire status bar service next time it is needed.
+                                         mStatusBarService = null;
+                                     }
+                            }});
+                        } else {
+                            mHandler.post(new Runnable() { public void run() {
+                                 try {
+                                     IStatusBarService statusbar = getStatusBarService();
+                                     if (statusbar != null) {
+                                         statusbar.toggleRingPanel();
+                                     }
+                                     } catch (RemoteException ex) {
+                                         // re-acquire status bar service next time it is needed.
+                                         mStatusBarService = null;
+                                     }
+                            }});
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+            });
     }
 
     @Override
@@ -1497,8 +1574,16 @@ public class NavigationBarView extends LinearLayout {
             mQuickButton.onTouchEvent(event);
             return true;
         }
-
+        if (mNVShow) {
+            mGestureDetector.onTouchEvent(event);
+            return true;
+        }
         return super.onTouchEvent(event);
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        return mGestureDetector.onTouchEvent(event);
     }
 
     private void updateNaviButtons() {
@@ -2053,6 +2138,98 @@ public class NavigationBarView extends LinearLayout {
         intentx.setClassName("com.cyanmobile.TaskSwitcher", "com.cyanmobile.TaskSwitcher.TaskSwitcherMainActivity");
         intentx.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         getContext().startActivity(intentx);
+    }
+
+    private void startCollapseActivity() {
+      if (mPrevious == 1) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.collapse();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else if (mPrevious == 0) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.expand();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else if (mPrevious == 2) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.toggleQwikWidgets();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else {
+         // nothing
+      }
+    }
+
+    private void startExpandActivity() {
+      if (mNext == 0) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.expand();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else if (mNext == 1) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.collapse();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else if (mNext == 2) {
+        mHandler.post(new Runnable() { public void run() {
+            try {
+                 IStatusBarService statusbar = getStatusBarService();
+                 if (statusbar != null) {
+                     statusbar.toggleQwikWidgets();
+                 }
+            } catch (RemoteException ex) {
+                 // re-acquire status bar service next time it is needed.
+                 mStatusBarService = null;
+            }
+        }});
+      } else {
+         // nothing
+      }
+    }
+
+    IStatusBarService getStatusBarService() {
+        if (mStatusBarService == null) {
+            mStatusBarService = IStatusBarService.Stub.asInterface(
+                    ServiceManager.getService("statusbar"));
+        }
+        return mStatusBarService;
     }
 
     /**

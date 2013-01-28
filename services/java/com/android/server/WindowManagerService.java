@@ -36,6 +36,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.policy.PolicyManager;
@@ -221,6 +222,11 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     static final int DIM_DURATION_MULTIPLIER = 6;
 
+    /**	
+     * Frame rate. TODO: Replace with Display.getRefreshRate() when that is reliable.
+     */
+    static final int FRAME_RATE = 60;
+
     /**
      * If true, the window manager will do its own custom freezing and general
      * management of the screen during rotation.
@@ -250,6 +256,11 @@ public class WindowManagerService extends IWindowManager.Stub
      * actually disabled the keyguard.
      */
     private boolean mKeyguardDisabled = false;
+
+    private static final int KEYGUARD_NOT_SHOWN     = 0;
+    private static final int KEYGUARD_ANIMATING_IN  = 1;
+    private static final int KEYGUARD_SHOWN         = 2;
+    private static final int KEYGUARD_ANIMATING_OUT = 3;
 
     private static final int ALLOW_DISABLE_YES = 1;
     private static final int ALLOW_DISABLE_NO = 0;
@@ -419,6 +430,7 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean mSystemBooted = false;
     boolean mForceDisplayEnabled = false;
     boolean mShowingBootMessages = false;
+    final Object mDisplaySizeLock = new Object();
     int mInitialDisplayWidth = 0;
     int mInitialDisplayHeight = 0;
     int mBaseDisplayWidth = 0;
@@ -692,8 +704,8 @@ public class WindowManagerService extends IWindowManager.Stub
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
-        mHoldingScreenWakeLock = pmc.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK,
-                "KEEP_SCREEN_ON_FLAG");
+        mHoldingScreenWakeLock = pmc.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                | PowerManager.ON_AFTER_RELEASE, "KEEP_SCREEN_ON_FLAG");
         mHoldingScreenWakeLock.setReferenceCounted(false);
 
         mInputManager = new InputManager(context, this);
@@ -2647,6 +2659,22 @@ public class WindowManagerService extends IWindowManager.Stub
                 | (displayed ? WindowManagerImpl.RELAYOUT_FIRST_TIME : 0);
     }
 
+    public boolean outOfMemoryWindow(Session session, IWindow client) {
+        long origId = Binder.clearCallingIdentity();
+
+        try {
+            synchronized(mWindowMap) {
+                WindowState win = windowForClientLocked(session, client, false);
+                if (win == null) {
+                    return false;
+                }
+                return reclaimSomeSurfaceMemoryLocked(win, "from-client", false);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
     public void finishDrawingWindow(Session session, IWindow client) {
         final long origId = Binder.clearCallingIdentity();
         synchronized(mWindowMap) {
@@ -2897,7 +2925,7 @@ public class WindowManagerService extends IWindowManager.Stub
     // Application Window Tokens
     // -------------------------------------------------------------
 
-    public void validateAppTokens(List tokens) {
+    public void validateAppTokens(List<IBinder> tokens) {
         int v = tokens.size()-1;
         int m = mAppTokens.size()-1;
         while (v >= 0 && m >= 0) {
@@ -4351,6 +4379,16 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public boolean isKeyguardSecure() {
         return mPolicy.isKeyguardSecure();
+    }
+
+    public void dismissKeyguard() {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DISABLE_KEYGUARD)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Requires DISABLE_KEYGUARD permission");
+        }
+        synchronized(mWindowMap) {
+            mPolicy.dismissKeyguardLw();
+        }
     }
 
     public void closeSystemDialogs(String reason) {
@@ -5958,6 +5996,10 @@ public class WindowManagerService extends IWindowManager.Stub
             return res;
         }
 
+        public boolean outOfMemory(IWindow window) {
+            return outOfMemoryWindow(this, window);
+        }
+
         public void setTransparentRegion(IWindow window, Region region) {
             setTransparentRegionWindow(this, window, region);
         }
@@ -6607,7 +6649,7 @@ public class WindowManagerService extends IWindowManager.Stub
                             + " / " + this);
                 } catch (Surface.OutOfResourcesException e) {
                     Slog.w(TAG, "OutOfResourcesException creating surface");
-                    reclaimSomeSurfaceMemoryLocked(this, "create");
+                    reclaimSomeSurfaceMemoryLocked(this, "create", true);
                     return null;
                 } catch (Exception e) {
                     Slog.e(TAG, "Exception creating surface", e);
@@ -6641,7 +6683,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         }
                     } catch (RuntimeException e) {
                         Slog.w(TAG, "Error creating surface in " + w, e);
-                        reclaimSomeSurfaceMemoryLocked(this, "create-init");
+                        reclaimSomeSurfaceMemoryLocked(this, "create-init", true);
                     }
                     mLastHidden = true;
                 } finally {
@@ -7689,6 +7731,9 @@ public class WindowManagerService extends IWindowManager.Stub
         // Last visibility state we reported to the app token.
         boolean reportedVisible;
 
+        // Last drawn state we reported to the app token.
+        boolean reportedDrawn;
+
         // Set to true when the token has been removed from the window mgr.
         boolean removed;
 
@@ -7884,6 +7929,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             int numInteresting = 0;
             int numVisible = 0;
+            int numDrawn = 0;
             boolean nowGone = true;
 
             if (DEBUG_VISIBILITY) Slog.v(TAG, "Update reported visibility: " + this);
@@ -7914,6 +7960,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 numInteresting++;
                 if (win.isDrawnLw()) {
+                    numDrawn++;
                     if (!win.isAnimating()) {
                         numVisible++;
                     }
@@ -7923,9 +7970,27 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             }
 
+            boolean nowDrawn = numInteresting > 0 && numDrawn >= numInteresting;
             boolean nowVisible = numInteresting > 0 && numVisible >= numInteresting;
+            if (!nowGone) {
+                // If the app is not yet gone, then it can only become visible/drawn.
+                if (!nowDrawn) {
+                   nowDrawn = reportedDrawn;
+                }
+                if (!nowVisible) {
+                   nowVisible = reportedVisible;
+                }
+            }
             if (DEBUG_VISIBILITY) Slog.v(TAG, "VIS " + this + ": interesting="
                     + numInteresting + " visible=" + numVisible);
+            if (nowDrawn != reportedDrawn) {
+                if (nowDrawn) {
+                   Message m = mH.obtainMessage(
+                        H.REPORT_APPLICATION_TOKEN_DRAWN, this);
+                   mH.sendMessage(m);
+                }
+                reportedDrawn = nowDrawn;
+            }
             if (nowVisible != reportedVisible) {
                 if (DEBUG_VISIBILITY) Slog.v(
                         TAG, "Visibility changed in " + this
@@ -7967,6 +8032,7 @@ public class WindowManagerService extends IWindowManager.Stub
             pw.print(prefix); pw.print("hiddenRequested="); pw.print(hiddenRequested);
                     pw.print(" clientHidden="); pw.print(clientHidden);
                     pw.print(" willBeHidden="); pw.print(willBeHidden);
+                    pw.print(" reportedDrawn="); pw.print(reportedDrawn);
                     pw.print(" reportedVisible="); pw.println(reportedVisible);
             if (paused || freezingScreen) {
                 pw.print(prefix); pw.print("paused="); pw.print(paused);
@@ -8062,6 +8128,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int REMOVE_STARTING = 6;
         public static final int FINISHED_STARTING = 7;
         public static final int REPORT_APPLICATION_TOKEN_WINDOWS = 8;
+        public static final int REPORT_APPLICATION_TOKEN_DRAWN = 9;
         public static final int WINDOW_FREEZE_TIMEOUT = 11;
         public static final int HOLD_SCREEN_CHANGED = 12;
         public static final int APP_TRANSITION_TIMEOUT = 13;
@@ -8272,6 +8339,17 @@ public class WindowManagerService extends IWindowManager.Stub
                         } catch (Exception e) {
                             Slog.w(TAG, "Exception when removing starting window", e);
                         }
+                    }
+                } break;
+
+                case REPORT_APPLICATION_TOKEN_DRAWN: {
+                    final AppWindowToken wtoken = (AppWindowToken)msg.obj;
+
+                    try {
+                        if (DEBUG_VISIBILITY) Slog.v(
+                                TAG, "Reporting drawn in " + wtoken);
+                        wtoken.appToken.windowsDrawn();
+                    } catch (RemoteException ex) {
                     }
                 } break;
 
@@ -8763,7 +8841,7 @@ public class WindowManagerService extends IWindowManager.Stub
             final AppWindowToken atoken = win.mAppToken;
             final boolean gone = win.mViewVisibility == View.GONE
                     || !win.mRelayoutCalled
-                    || win.mRootToken.hidden
+                    || (atoken == null && win.mRootToken.hidden)
                     || (atoken != null && atoken.hiddenRequested)
                     || win.mAttachedHidden
                     || win.mExiting || win.mDestroying;
@@ -8983,7 +9061,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
                 boolean tokenMayBeDrawn = false;
                 boolean wallpaperMayChange = false;
-                boolean forceHiding = false;
+                int forceHiding = KEYGUARD_NOT_SHOWN;
 
                 mPolicy.beginAnimationLw(dw, dh);
 
@@ -8993,6 +9071,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     WindowState w = mWindows.get(i);
 
                     final WindowManager.LayoutParams attrs = w.mAttrs;
+                    final int attrFlags = attrs.flags;
 
                     if (w.mSurface != null) {
                         // Execute animation.
@@ -9021,14 +9100,27 @@ public class WindowManagerService extends IWindowManager.Stub
                                         + w);
                                 wallpaperForceHidingChanged = true;
                                 mFocusMayChange = true;
-                            } else if (w.isReadyForDisplay() && ((Settings.System.getInt(mContext.getContentResolver(),
-                                    Settings.System.LOCKSCREEN_SEE_THROUGH, 0) != 0) ||  w.mAnimation == null)) {
-                                forceHiding = (Settings.System.getInt(mContext.getContentResolver(),
-                                    Settings.System.LOCKSCREEN_SEE_THROUGH, 0) != 1) ? true : false;
                             }
+                            if (w.isReadyForDisplay() && (w.mAnimation == null)) {
+                                if (animating) {
+                                    if (w.mAnimationIsEntrance) {
+                                        forceHiding = (Settings.System.getInt(mContext.getContentResolver(),
+                                                Settings.System.LOCKSCREEN_SEE_THROUGH, 0) != 1) ? KEYGUARD_ANIMATING_IN : KEYGUARD_ANIMATING_OUT;
+                                     } else {
+                                        forceHiding = KEYGUARD_ANIMATING_OUT;
+                                     }
+                                 } else {
+                                     forceHiding = (Settings.System.getInt(mContext.getContentResolver(),
+                                                Settings.System.LOCKSCREEN_SEE_THROUGH, 0) != 1) ? KEYGUARD_SHOWN : KEYGUARD_ANIMATING_OUT;
+                                 }
+                             }
                         } else if (mPolicy.canBeForceHidden(w, attrs)) {
+                            final boolean hideWhenLocked =
+                                    (attrFlags & FLAG_SHOW_WHEN_LOCKED) == 0;
                             boolean changed;
-                            if (forceHiding) {
+                            if (((forceHiding == KEYGUARD_ANIMATING_IN)
+                                   && (!w.isAnimating() || hideWhenLocked))
+                                   || ((forceHiding == KEYGUARD_SHOWN) && hideWhenLocked)) {
                                 changed = w.hideLw(false, false);
                                 if (DEBUG_VISIBILITY && changed) Slog.v(TAG,
                                         "Now policy hidden: " + w);
@@ -9428,14 +9520,14 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (mLowerWallpaperTarget == null) {
                         // Whoops, we don't need a special wallpaper animation.
                         // Clear them out.
-                        forceHiding = false;
+                        forceHiding = KEYGUARD_NOT_SHOWN;
                         for (i=N-1; i>=0; i--) {
                             WindowState w = mWindows.get(i);
                             if (w.mSurface != null) {
                                 final WindowManager.LayoutParams attrs = w.mAttrs;
                                 if (mPolicy.doesForceHide(w, attrs) && w.isVisibleLw()) {
                                     if (DEBUG_FOCUS) Slog.i(TAG, "win=" + w + " force hides other windows");
-                                    forceHiding = true;
+                                    forceHiding = KEYGUARD_SHOWN;
                                 } else if (mPolicy.canBeForceHidden(w, attrs)) {
                                     if (!w.mAnimating) {
                                         // We set the animation above so it
@@ -9546,7 +9638,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         } catch (RuntimeException e) {
                             Slog.w(TAG, "Error positioning surface in " + w, e);
                             if (!recoveringMemory) {
-                                reclaimSomeSurfaceMemoryLocked(w, "position");
+                                reclaimSomeSurfaceMemoryLocked(w, "position", true);
                             }
                         }
                     } else {
@@ -9583,7 +9675,7 @@ public class WindowManagerService extends IWindowManager.Stub
                                         + "), pos=(" + w.mShownFrame.left
                                         + "," + w.mShownFrame.top + ")", e);
                                 if (!recoveringMemory) {
-                                    reclaimSomeSurfaceMemoryLocked(w, "size");
+                                    reclaimSomeSurfaceMemoryLocked(w, "size", true);
                                 }
                             }
                         }
@@ -9710,7 +9802,7 @@ public class WindowManagerService extends IWindowManager.Stub
                             } catch (RuntimeException e) {
                                 Slog.w(TAG, "Error updating surface in " + w, e);
                                 if (!recoveringMemory) {
-                                    reclaimSomeSurfaceMemoryLocked(w, "update");
+                                    reclaimSomeSurfaceMemoryLocked(w, "update", true);
                                 }
                             }
                         }
@@ -10064,7 +10156,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (needRelayout) {
             requestAnimationLocked(0);
         } else if (animating) {
-            requestAnimationLocked(currentTime+(1000/60)-SystemClock.uptimeMillis());
+            requestAnimationLocked(currentTime+(1000/FRAME_RATE)-SystemClock.uptimeMillis());
         }
         
         mInputMonitor.updateInputWindowsLw();
@@ -10200,13 +10292,15 @@ public class WindowManagerService extends IWindowManager.Stub
             Slog.w(TAG, "Failure showing surface " + win.mSurface + " in " + win, e);
         }
 
-        reclaimSomeSurfaceMemoryLocked(win, "show");
+        reclaimSomeSurfaceMemoryLocked(win, "show", true);
 
         return false;
     }
 
-    void reclaimSomeSurfaceMemoryLocked(WindowState win, String operation) {
+    boolean reclaimSomeSurfaceMemoryLocked(WindowState win, String operation, boolean secure) {
         final Surface surface = win.mSurface;
+        boolean leakedSurface = false;
+        boolean killedApps = false;
 
         EventLog.writeEvent(EventLogTags.WM_NO_SURFACE_MEMORY, win.toString(),
                 win.mSession.mPid, operation);
@@ -10221,7 +10315,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // window list to make sure we haven't left any dangling surfaces
             // around.
             int N = mWindows.size();
-            boolean leakedSurface = false;
             Slog.i(TAG, "Out of memory for surface!  Looking for leaks...");
             for (int i=0; i<N; i++) {
                 WindowState ws = mWindows.get(i);
@@ -10253,7 +10346,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             }
 
-            boolean killedApps = false;
             if (!leakedSurface) {
                 Slog.w(TAG, "No leaked surfaces; killing applicatons!");
                 SparseIntArray pidCandidates = new SparseIntArray();
@@ -10269,7 +10361,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         pids[i] = pidCandidates.keyAt(i);
                     }
                     try {
-                        if (mActivityManager.killPids(pids, "Free memory")) {
+                        if (mActivityManager.killPids(pids, "Free memory", secure)) {
                             killedApps = true;
                         }
                     } catch (RemoteException e) {
@@ -10296,6 +10388,8 @@ public class WindowManagerService extends IWindowManager.Stub
         } finally {
             Binder.restoreCallingIdentity(callingIdentity);
         }
+
+        return leakedSurface || killedApps;
     }
 
     private boolean updateFocusedWindowLocked(int mode) {

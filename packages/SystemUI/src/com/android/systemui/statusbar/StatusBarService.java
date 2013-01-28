@@ -52,9 +52,12 @@ import com.android.systemui.statusbar.powerwidget.PowerWidgetTwo;
 import com.android.systemui.statusbar.powerwidget.PowerWidgetThree;
 import com.android.systemui.statusbar.powerwidget.PowerWidgetFour;
 import com.android.systemui.statusbar.powerwidget.MusicControls;
+import com.android.systemui.statusbar.qwidgets.QwikWidgetsPanelView;
 import com.android.systemui.statusbar.quicksettings.QuickSettingsContainerView;
 import com.android.systemui.statusbar.quicksettings.QuickSettingsController;
 import com.android.systemui.statusbar.policy.NetworkController;
+import com.android.systemui.statusbar.policy.StatusBarPolicy;
+import com.android.systemui.statusbar.policy.DataTraffics;
 import com.android.systemui.R;
 import android.os.IPowerManager;
 import android.provider.Settings.SettingNotFoundException;
@@ -106,6 +109,7 @@ import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.IWindowManager;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -155,12 +159,20 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private static final int BRIGHTNESS_CONTROL_LINGER_THRESHOLD = 20;
     private boolean mBrightnessControl;
 
+    public static final int KEYCODE_VIRTUAL_BACK_LONG=KeyEvent.getMaxKeyCode()+2;
+
     private static final int MSG_ANIMATE = 1000;
     private static final int MSG_ANIMATE_REVEAL = 1001;
     private int mClockColor;
 
     private static final int MSG_SHOW_INTRUDER = 1002;
     private static final int MSG_HIDE_INTRUDER = 1003;
+
+    private static final int MSG_SHOW_WIDGETS_PANEL = 1004;
+    private static final int MSG_HIDE_WIDGETS_PANEL = 1005;
+
+    private static final int MSG_SHOW_RING_PANEL = 1006;
+    private static final int MSG_HIDE_RING_PANEL = 1007;
 
     // will likely move to a resource or other tunable param at some point
     private static final int INTRUDER_ALERT_DECAY_MS = 3000;
@@ -257,6 +269,8 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     PowerWidgetTwo mPowerWidgetTwo;
     PowerWidgetThree mPowerWidgetThree;
     PowerWidgetFour mPowerWidgetFour;
+    QwikWidgetsPanelView mWidgetsPanel;
+    RingPanelView mRingPanel;
 
     MusicControls mMusicControls;
 
@@ -493,9 +507,9 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             shouldTick = (Settings.System.getInt(resolver, Settings.System.STATUS_BAR_INTRUDER_ALERT, 1) == 1);
             mClockColor = (Settings.System.getInt(resolver, Settings.System.STATUS_BAR_CLOCKCOLOR, defValuesColor));
             mSettingsColor = (Settings.System.getInt(resolver, Settings.System.STATUS_BAR_SETTINGSCOLOR, defValuesColor));
-            mStatusBarTab = ((Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 1) == 4)
-                      || (Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 1) == 5));
-            mStatusBarGrid = (Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 1) == 3);
+            mStatusBarTab = ((Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 5) == 4)
+                      || (Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 5) == 5));
+            mStatusBarGrid = (Settings.System.getInt(resolver, Settings.System.EXPANDED_VIEW_WIDGET, 5) == 3);
             mNaviShow = (Settings.System.getInt(resolver, Settings.System.SHOW_NAVI_BUTTONS, 1) == 1);
             mTinyExpanded = (Settings.System.getInt(resolver, Settings.System.STATUSBAR_TINY_EXPANDED, 1) == 1);
             mMoreExpanded = (Settings.System.getInt(resolver, Settings.System.STATUSBAR_MORE_EXPANDED, 1) == 1);
@@ -542,7 +556,6 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             mLinger = BRIGHTNESS_CONTROL_LINGER_THRESHOLD + 1;
         }
     };
-
 
     @Override
     public void onCreate() {
@@ -615,6 +628,8 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         addStatusBarView();
         addNavigationBar();
         addIntruderView();
+        updateWidgetsPanel();
+        updateRingsPanel();
 
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy = new StatusBarPolicy(this);
@@ -679,9 +694,9 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         shouldTick = (Settings.System.getInt(getContentResolver(), Settings.System.STATUS_BAR_INTRUDER_ALERT, 1) == 1);
         mClockColor = (Settings.System.getInt(getContentResolver(), Settings.System.STATUS_BAR_CLOCKCOLOR, defValuesColor));
         mSettingsColor = (Settings.System.getInt(getContentResolver(), Settings.System.STATUS_BAR_SETTINGSCOLOR, defValuesColor));
-        mStatusBarTab = ((Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 1) == 4)
-                     || (Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 1) == 5));
-        mStatusBarGrid = (Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 1) == 3);
+        mStatusBarTab = ((Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 5) == 4)
+                     || (Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 5) == 5));
+        mStatusBarGrid = (Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 5) == 3);
         mNaviShow = (Settings.System.getInt(getContentResolver(), Settings.System.SHOW_NAVI_BUTTONS, 1) == 1);
         mTinyExpanded = (Settings.System.getInt(getContentResolver(), Settings.System.STATUSBAR_TINY_EXPANDED, 1) == 1);
         mMoreExpanded = (Settings.System.getInt(getContentResolver(), Settings.System.STATUSBAR_TINY_EXPANDED, 1) == 1);
@@ -712,6 +727,13 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
         mNavigationBarView = (NavigationBarView)View.inflate(context, R.layout.navigation_bar, null);
         mNaviBarContainer = (FrameLayout) mNavigationBarView.findViewById(R.id.navibarBackground);
+
+        mWidgetsPanel = (QwikWidgetsPanelView) View.inflate(context, R.layout.qwik_widgets_panel, null);
+        mWidgetsPanel.setVisibility(View.GONE);
+
+        mRingPanel = (RingPanelView) View.inflate(context, R.layout.ring_widget_panel, null);
+        mRingPanel.setOnTouchListener(mRingPanelListener);
+        mRingPanel.setVisibility(View.GONE);
 
         mBackLogoLayout = (BackLogo) mStatusBarView.findViewById(R.id.backlogo);
 
@@ -919,6 +941,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         mCarrierLabelLayout = (LinearLayout) mExpandedView.findViewById(R.id.carrier_label_layout);
         mCompactCarrierLayout = (LinearLayout) mExpandedView.findViewById(R.id.compact_carrier_layout);
         mAvalMemLayout = (LinearLayout) mExpandedView.findViewById(R.id.memlabel_layout);
+        mAvalMemLayout.setOnClickListener(mAvalMemLayoutListener);
         memHeader = (TextView) mExpandedView.findViewById(R.id.avail_mem_text);
         avalMemPB = (ProgressBar) mExpandedView.findViewById(R.id.aval_memos);
         mTicker = new MyTicker(context, mStatusBarView);
@@ -1130,7 +1153,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     }
 
     private void updateSettings() {
-        int changedVal = Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 1);
+        int changedVal = Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 5);
         // check that it's not 0 to not reset the variable
         // this should be the only place mLastPowerToggle is set
         if (changedVal != 0) {
@@ -1407,12 +1430,12 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
-                0
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                | WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    0
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    | WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING
+                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.FILL_HORIZONTAL;
         lp.y += height * 1.5; // FIXME
@@ -1420,6 +1443,37 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         lp.windowAnimations = R.style.Animations_PopDownMenu_Center;
 
         WindowManagerImpl.getDefault().addView(mIntruderAlertView, lp);
+    }
+
+    private void updateWidgetsPanel() {
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                0
+                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_TOUCHABLE_WHEN_WAKING,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        lp.setTitle("QwiksWidget");
+        lp.windowAnimations = R.style.Animations_PopDownMenu_Center;
+
+        WindowManagerImpl.getDefault().addView(mWidgetsPanel, lp);
+    }
+
+    private void updateRingsPanel() {
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                    0
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        lp.setTitle("RingPanel");
+        lp.windowAnimations = R.style.Animations_PopDownMenu_Center;
+        WindowManagerImpl.getDefault().addView(mRingPanel, lp);
     }
 
     protected void addStatusBarView() {
@@ -1791,7 +1845,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         if (latest) {
             if (mStatusBarTab) {
                 mNoNotificationsTitles.setVisibility(View.GONE);
-                TogglePower();
+                togglePower();
             }
         } else {
             if (mStatusBarTab) {
@@ -1895,6 +1949,25 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                 case MSG_HIDE_INTRUDER:
                     setIntruderAlertVisibility(false);
                     break;
+                case MSG_SHOW_WIDGETS_PANEL:
+                    if (mWidgetsPanel != null) {
+                        mWidgetsPanel.show(true, false);
+                    }
+                    break;
+                case MSG_HIDE_WIDGETS_PANEL:
+                    if (mWidgetsPanel != null && mWidgetsPanel.isShowing()) {
+                        mWidgetsPanel.show(false, false);
+                    }
+                case MSG_SHOW_RING_PANEL:
+                    if (mRingPanel != null) {
+                        mRingPanel.show(true);
+                    }
+                    break;
+                case MSG_HIDE_RING_PANEL:
+                    if (mRingPanel != null && mRingPanel.isShowing()) {
+                        mRingPanel.show(false);
+                    }
+                    break;
             }
         }
     }
@@ -1941,6 +2014,8 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     }
 
     public void animateExpand() {
+        toggleHideQwikWidgets();
+        toggleHideRingPanel();
         if (SPEW) Slog.d(TAG, "Animate expand: expanded=" + mExpanded);
         if ((mDisabled & StatusBarManager.DISABLE_EXPAND) != 0) {
             return ;
@@ -1954,6 +2029,8 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     }
 
     public void animateCollapse() {
+        toggleHideQwikWidgets();
+        toggleHideRingPanel();
         if (SPEW) {
             Slog.d(TAG, "animateCollapse(): mExpanded=" + mExpanded
                     + " mExpandedVisible=" + mExpandedVisible
@@ -1996,7 +2073,6 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         mStatusBarView.updateQuickNaImage();
         makeExpandedVisible();
         updateExpandedViewPos(EXPANDED_FULL_OPEN);
-
         if (false) postStartTracing();
     }
 
@@ -2393,6 +2469,9 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                 // the user switches to home.  We know it is safe to do at this
                 // point, so make sure new activity switches are now allowed.
                 ActivityManagerNative.getDefault().resumeAppSwitches();
+                // Also, notifications can be launched from the lock screen,
+                // so dismiss the lock screen when the activity starts.
+                ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
             } catch (RemoteException e) {
             }
 
@@ -2893,7 +2972,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private View.OnClickListener mMusicToggleButtonListener = new View.OnClickListener() {
 	public void onClick(View v) {
            if (mStatusBarTab) {
-               ToggleNotif();
+               toggleNotif();
            }
 	   mMusicControls.visibilityToggled();
 	}
@@ -2932,14 +3011,27 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         }
     };
 
+    private View.OnTouchListener mRingPanelListener = new View.OnTouchListener() {
+        public boolean onTouch(View v, MotionEvent ev) {
+            final int action = ev.getAction();
+            if ((action == MotionEvent.ACTION_DOWN
+                    && !mRingPanel.isInContentArea((int)ev.getX(), (int)ev.getY()))) {
+                mHandler.removeMessages(MSG_HIDE_RING_PANEL);
+                mHandler.sendEmptyMessage(MSG_HIDE_RING_PANEL);
+                return true;
+            }
+            return false;
+        }
+    };
+
     private View.OnClickListener mSettingsIconButtonListener = new View.OnClickListener() {
         public void onClick(View v) {
               mSettingsIconButton.clearColorFilter();
               if (mStatusBarTab) {
                 if (NotifEnable) {
-                    TogglePower();
+                    togglePower();
                 } else {
-                    ToggleNotif();
+                    toggleNotif();
                 }
               } else {
                 Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -2956,10 +3048,17 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         }
     };
 
+    private View.OnClickListener mAvalMemLayoutListener = new View.OnClickListener() {
+        public void onClick(View v) {
+            simulateKeypress(KEYCODE_VIRTUAL_BACK_LONG);
+            getMemInfo();
+        }
+    };
+
     private View.OnClickListener mTogglePowerListener = new View.OnClickListener() {
         public void onClick(View v) {
              if (NotifEnable) {
-                 TogglePower();
+                 togglePower();
              }
         }
     };
@@ -2967,12 +3066,14 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private View.OnClickListener mToggleNotifListener = new View.OnClickListener() {
         public void onClick(View v) {
             if (!NotifEnable) {
-                ToggleNotif();
+                toggleNotif();
             }
         }
     };
 
-    void ToggleNotif() {
+    public void toggleNotif() {
+          if (!mStatusBarTab) return;
+
           mSettingsIconButton.setImageResource(R.drawable.ic_qs_panel);
           mButtonsToggle.setTextColor(mClockColor);
           mNotificationsToggle.setTextColor(Color.parseColor("#666666"));
@@ -2986,7 +3087,9 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
           NotifEnable = true;
     }
 
-    void TogglePower() {
+    public void togglePower() {
+          if (!mStatusBarTab) return;
+
           mSettingsIconButton.setImageResource(R.drawable.ic_qs_notif);
           mNotificationsToggle.setTextColor(mClockColor);
           mButtonsToggle.setTextColor(Color.parseColor("#666666"));
@@ -3039,7 +3142,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
     private View.OnClickListener mCarrierButtonListener = new View.OnClickListener() {
         public void onClick(View v) {
-             if(Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 1) == 0) {
+             if(Settings.System.getInt(getContentResolver(), Settings.System.EXPANDED_VIEW_WIDGET, 5) == 0) {
                 QuickSettingsPopupWindow quickSettingsWindow = new QuickSettingsPopupWindow(v);
                 quickSettingsWindow.showLikeQuickAction();
              }
@@ -3048,6 +3151,30 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
     public void setIMEVisible(boolean visible) {
          mNavigationBarView.setIMEVisible(visible);
+    }
+
+    public void toggleQwikWidgets() {
+        int msg = (mWidgetsPanel.getVisibility() == View.VISIBLE)
+            ? MSG_HIDE_WIDGETS_PANEL : MSG_SHOW_WIDGETS_PANEL;
+        mHandler.removeMessages(msg);
+        mHandler.sendEmptyMessage(msg);
+    }
+
+    public void toggleRingPanel() {
+        int msg = (mRingPanel.getVisibility() == View.VISIBLE)
+            ? MSG_HIDE_RING_PANEL : MSG_SHOW_RING_PANEL;
+        mHandler.removeMessages(msg);
+        mHandler.sendEmptyMessage(msg);
+    }
+
+    private void toggleHideQwikWidgets() {
+        mHandler.removeMessages(MSG_HIDE_WIDGETS_PANEL);
+        mHandler.sendEmptyMessage(MSG_HIDE_WIDGETS_PANEL);
+    }
+
+    private void toggleHideRingPanel() {
+        mHandler.removeMessages(MSG_HIDE_RING_PANEL);
+        mHandler.sendEmptyMessage(MSG_HIDE_RING_PANEL);
     }
 
     private View.OnClickListener mIconButtonListener = new View.OnClickListener() {
@@ -3103,6 +3230,10 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                     LeftClock clockLeft = (LeftClock) mStatusBarView.findViewById(R.id.clockLe);
                     if (clockLeft != null) {
                         clockLeft.invalidate();
+                    }
+                    DataTraffics dataTraffics = (DataTraffics) mExpandedView.findViewById(R.id.dataTrafficsExp);
+                    if (dataTraffics != null) {
+                        dataTraffics.invalidate();
                     }
                 }
                 repositionNavigationBar();
@@ -3211,4 +3342,37 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             vibrate();
         }
     };
+
+    /**
+     * Runnable to hold simulate a keypress.
+     *
+     * This is executed in a separate Thread to avoid blocking
+     */
+    private void simulateKeypress(final int keyCode) {
+        new Thread(new KeyEventInjector( keyCode ) ).start();
+    }
+
+    private class KeyEventInjector implements Runnable {
+        private int keyCode;
+
+        KeyEventInjector(final int keyCode) {
+            this.keyCode = keyCode;
+        }
+
+        public void run() {
+            try {
+                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
+                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode), true) ) {
+                                   Slog.w(TAG, "Key down event not injected");
+                                   return;
+                              }
+                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
+                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode), true) ) {
+                                  Slog.w(TAG, "Key up event not injected");
+                             }
+           } catch (RemoteException ex) {
+               Slog.w(TAG, "Error injecting key event", ex);
+           }
+        }
+    }
 }

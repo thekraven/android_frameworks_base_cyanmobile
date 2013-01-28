@@ -36,6 +36,7 @@ public class UserTile extends QuickSettingsTile {
             @Override
             public void onClick(View v) {
                 queryForUserInformation();
+                flipTile();
             }
         };
         mOnLongClick = new View.OnLongClickListener() {
@@ -47,10 +48,7 @@ public class UserTile extends QuickSettingsTile {
                 return true;
             }
         };
-        qsc.registerAction(Intent.ACTION_BATTERY_CHANGED, this);
         qsc.registerAction(Intent.ACTION_CONFIGURATION_CHANGED, this);
-        qsc.registerAction(Intent.ACTION_TIME_CHANGED, this);
-        qsc.registerAction(Intent.ACTION_TIMEZONE_CHANGED, this);
         qsc.registerObservedContent(Settings.System.getUriFor(Settings.System.USER_MY_NUMBERS)
                 , this);
     }
@@ -68,6 +66,7 @@ public class UserTile extends QuickSettingsTile {
     @Override
     void onPostCreate() {
         queryForUserInformation();
+        if (enableFlip()) mHandler.postDelayed(mResetFlip, 8000); //8 second
         super.onPostCreate();
     }
 
@@ -77,16 +76,19 @@ public class UserTile extends QuickSettingsTile {
         TextView tv = (TextView) mTile.findViewById(R.id.user_textview);
         tv.setText(mLabel);
         iv.setImageDrawable(userAvatar);
-        flipTile();
     }
+
+    Runnable mResetFlip = new Runnable() {
+        public void run() {
+            flipTile();
+            if (enableFlip()) mHandler.postDelayed(mResetFlip, 8000); //8 second
+        }
+    };
 
     private void queryForUserInformation() {
         ContentResolver resolver = mContext.getContentResolver();
         String numbers = Settings.System.getString(resolver, Settings.System.USER_MY_NUMBERS);
         Drawable avatar = null;
-        if (numbers.equals("000000000") || numbers.equals("") || TextUtils.isEmpty(numbers)) {
-            numbers = null;
-        }
         if (numbers != null) {
             String name = SmsHelper.getName(mContext, numbers);
             Bitmap rawAvatar = SmsHelper.getContactPicture(mContext, numbers);

@@ -245,6 +245,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     KeyguardViewMediator mKeyguardMediator = null;
     GlobalActions mGlobalActions;
     volatile boolean mPowerKeyHandled;
+    boolean mPendingPowerKeyUpCanceled;
     RecentApplicationsDialog mRecentAppsDialog;
     Handler mHandler;
 
@@ -284,6 +285,51 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mNaviShowAll2 = true;
     int mPointerLocationMode = 0;
     int mBackKillTimeout;
+
+    private PowerMenuReceiver mPowerMenuReceiver;
+
+    class PowerMenuReceiver extends BroadcastReceiver {
+        private boolean mIsRegistered = false;
+
+        public PowerMenuReceiver(Context context) {
+        }
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (action.equals(Intent.ACTION_POWERMENU)) {
+                showGlobalActionsDialog();
+            } else if (action.equals(Intent.ACTION_POWERMENU_REBOOT)) {
+                doRebooting();
+            } else if (action.equals(Intent.ACTION_POWERMENU_PROFILE)) {
+                showGlobalActionsProfileDialog();
+            }
+        }
+
+        private void doRebooting() {
+            PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+            pm.reboot("TileView");
+        }
+
+        private void registerSelf() {
+            if (!mIsRegistered) {
+                mIsRegistered = true;
+
+                IntentFilter filter = new IntentFilter();
+                filter.addAction(Intent.ACTION_POWERMENU);
+                filter.addAction(Intent.ACTION_POWERMENU_REBOOT);
+                filter.addAction(Intent.ACTION_POWERMENU_PROFILE);
+                mContext.registerReceiver(mPowerMenuReceiver, filter);
+            }
+        }
+
+        private void unregisterSelf() {
+            if (mIsRegistered) {
+                mIsRegistered = false;
+                mContext.unregisterReceiver(this);
+            }
+        }
+    }
 
     PointerLocationView mPointerLocationView = null;
     InputChannel mPointerLocationInputChannel;
@@ -352,6 +398,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Behavior of volume wake
     boolean mVolumeWakeScreen;
 
+    // Screenshot trigger states
+    // Time to volume and power must be pressed within this interval of each other.
+    private static final long SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS = 150;
+    private boolean mVolumeDownKeyTriggered;
+    private long mVolumeDownKeyTime;
+    private boolean mVolumeDownKeyConsumedByScreenshotChord;
+    private boolean mVolumeUpKeyTriggered;
+    private boolean mPowerKeyTriggered;
+    private long mPowerKeyTime;
+
     // Behavior of volbtn music controls
     boolean mVolBtnMusicControls;
     // Behavior of cambtn music controls
@@ -374,9 +430,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mFancyRotationAnimation;
     boolean mLongPressBackKill;
     boolean mBackJustKilled;
-
-    private boolean mVolumeDownTriggered;
-    private boolean mPowerDownTriggered;
 
     ShortcutManager mShortcutManager;
     PowerManager.WakeLock mBroadcastWakeLock;
@@ -620,6 +673,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
+    void showGlobalActionsProfileDialog() {
+        if (mGlobalActions == null) {
+            mGlobalActions = new GlobalActions(mContext);
+        }
+        mGlobalActions.showProfileDialog();
+    }
+
     void showGlobalActionsDialog() {
         if (mGlobalActions == null) {
             mGlobalActions = new GlobalActions(mContext);
@@ -709,9 +769,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return;
             }
             try {
-                final Intent intent = new Intent(Intent.ACTION_MAIN);
+                final Intent intent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_HOME);
                 String defaultHomePackage = "com.android.launcher";
-                intent.addCategory(Intent.CATEGORY_HOME);
                 final ResolveInfo res = mContext.getPackageManager().resolveActivity(intent, 0);
                 if (res.activityInfo != null && !res.activityInfo.packageName.equals("android")) {
                     defaultHomePackage = res.activityInfo.packageName;
@@ -965,6 +1024,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             screenTurnedOff(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
         }
 
+        // register broadcast receiver for power menu intents
+        mPowerMenuReceiver = new PowerMenuReceiver(context);
+        mPowerMenuReceiver.registerSelf();
     }
 
     public void setInitialDisplaySize(int width, int height) {
@@ -1563,6 +1625,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (false) {
             Log.d(TAG, "interceptKeyTi keyCode=" + keyCode + " down=" + down + " repeatCount="
                     + repeatCount + " keyguardOn=" + keyguardOn + " mHomePressed=" + mHomePressed);
+        }
+
+        // If we think we might have a volume down & power key chord on the way
+        // but we're not sure, then tell the dispatcher to wait a little while and
+        // try again later before dispatching.
+        if (canceled) {
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+                    && mVolumeDownKeyConsumedByScreenshotChord) {
+                if (!down) {
+                    mVolumeDownKeyConsumedByScreenshotChord = false;
+                }
+            }
         }
 
         // Clear a pending HOME longpress if the user releases Home
@@ -2485,6 +2559,40 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHandler.removeCallbacks(mCameraLongPress);
     }
 
+    private final Runnable mScreenshotChordLongPress = new Runnable() {
+        public void run() {
+            /*Intent intent = new Intent("android.intent.action.SCREENSHOT");
+            mContext.sendBroadcast(intent);*/
+        }
+    };
+
+    private void cancelPendingPowerKeyAction() {
+        if (!mPowerKeyHandled) {
+            mHandler.removeCallbacks(mPowerLongPress);
+        }
+        if (mPowerKeyTriggered) {
+            mPendingPowerKeyUpCanceled = true;
+        }
+    }
+
+    private void interceptScreenshotChord() {
+        if (mVolumeDownKeyTriggered && mPowerKeyTriggered && !mVolumeUpKeyTriggered) {
+            final long now = SystemClock.uptimeMillis();
+            if (now <= mVolumeDownKeyTime + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS
+                    && now <= mPowerKeyTime + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS) {
+                mVolumeDownKeyConsumedByScreenshotChord = true;
+                cancelPendingPowerKeyAction();
+
+                mHandler.postDelayed(mScreenshotChordLongPress,
+                        ViewConfiguration.getGlobalActionKeyTimeout());
+            }
+        }
+    }
+
+    private void cancelPendingScreenshotChordAction() {
+        mHandler.removeCallbacks(mScreenshotChordLongPress);
+    }
+
     /** {@inheritDoc} */
     @Override
     public int interceptKeyBeforeQueueing(long whenNanos, int action, int flags,
@@ -2537,30 +2645,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             boolean isWakeKey = (policyFlags
                     & (WindowManagerPolicy.FLAG_WAKE | WindowManagerPolicy.FLAG_WAKE_DROPPED)) != 0
-                    || ((keyCode == BTN_MOUSE) && mTrackballWakeScreen)
-                    || ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) && mVolumeWakeScreen)
-                    || ((keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) && mVolumeWakeScreen);
-
-            // Don't wake the screen if we have not set the option "wake with volume" in CMParts
-            // OR if "wake with volume" is set but screen is off due to proximity sensor
-            // regardless if WAKE Flag is set in keylayout
-            final boolean isOffByProx = (mScreenOffReason == WindowManagerPolicy.OFF_BECAUSE_OF_PROX_SENSOR);
-            if (isWakeKey
-                    && (!mVolumeWakeScreen || isOffByProx)
-                    && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))) {
-                isWakeKey = false;
-            }
-
-            // make sure keyevent get's handled as power key on volume-wake
-            if(mVolumeWakeScreen && isWakeKey && ((keyCode == KeyEvent.KEYCODE_VOLUME_UP)
-                    || (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)))
-                keyCode = KeyEvent.KEYCODE_POWER;
+                    || ((keyCode == BTN_MOUSE) && mTrackballWakeScreen);
 
             if (down && isWakeKey) {
                 if (keyguardActive) {
                     // If the keyguard is showing, let it decide what to do with the wake key.
                     mKeyguardMediator.onWakeKeyWhenKeyguardShowingTq(keyCode);
-                } else {
+                } else if ((keyCode != KeyEvent.KEYCODE_VOLUME_UP) && (keyCode != KeyEvent.KEYCODE_VOLUME_DOWN)) {
                     // Otherwise, wake the device ourselves.
                     result |= ACTION_POKE_USER_ACTIVITY;
                 }
@@ -2598,31 +2689,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
               }
             }
             case KeyEvent.KEYCODE_VOLUME_DOWN:
-                if (down) {
-                    if (mPowerDownTriggered) {
-                          mHandler.removeCallbacks(mPowerLongPress);
-                          mPowerKeyHandled = true;
-                          result &= ~ACTION_PASS_TO_USER;
-                          break;
-                    }
-                    mVolumeDownTriggered = true;
-                } else {
-                    mVolumeDownTriggered = false;
-                }
             case KeyEvent.KEYCODE_VOLUME_UP: {
-                // cm71 nightlies: will be replaced by CmPhoneWindowManager's new volume handling
-                if(mVolBtnMusicControls && !down)
-                {
-                    handleVolumeLongPressAbort();
-
-                    // delay handling volume events if mVolBtnMusicControls is desired
-                    if (!mIsLongPress && (result & ACTION_PASS_TO_USER) == 0) {
-                        boolean musicActive = isMusicActive();
-                        if (musicActive || isFmActive()) {
-                            int stream = musicActive ?
-                                    AudioManager.STREAM_MUSIC : AudioManager.STREAM_FM;
-                            handleVolumeKey(stream, keyCode);
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                    if (down) {
+                        if (isScreenOn && !mVolumeDownKeyTriggered) {
+                            mVolumeDownKeyTriggered = true;
+                            mVolumeDownKeyTime = 150;
+                            mVolumeDownKeyConsumedByScreenshotChord = false;
+                            cancelPendingPowerKeyAction();
+                            interceptScreenshotChord();
                         }
+                    } else {
+                        mVolumeDownKeyTriggered = false;
+                        cancelPendingScreenshotChordAction();
+                    }
+                } else if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                    if (down) {
+                        if (isScreenOn && !mVolumeUpKeyTriggered) {
+                            mVolumeUpKeyTriggered = true;
+                            cancelPendingPowerKeyAction();
+                            cancelPendingScreenshotChordAction();
+                        }
+                    } else {
+                        mVolumeUpKeyTriggered = false;
+                        cancelPendingScreenshotChordAction();
                     }
                 }
                 if (down) {
@@ -2659,30 +2749,38 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             Log.w(TAG, "ITelephony threw RemoteException", ex);
                         }
                     }
-
-                    // cm71 nightlies: will be replaced by CmPhoneWindowManager's new volume handling
-                    if ((result & ACTION_PASS_TO_USER) == 0) {
-                        boolean musicActive = isMusicActive();
-
-                        if (musicActive || isFmActive()) {
-                            if (mVolBtnMusicControls) {
-                               // initialize long press flag to false for volume events
-                                mIsLongPress = false;
-
-                                // if the button is held long enough, the following
-                                // procedure will set mIsLongPress=true
-                                handleVolumeLongPress(keyCode);
-                            } else {
-                                // If music is playing but we decided not to pass the key to the
-                                // application, handle the volume change here.
-                                int stream = musicActive ?
-                                        AudioManager.STREAM_MUSIC : AudioManager.STREAM_FM;
-                                handleVolumeKey(stream, keyCode);
+                }
+                // cm71 nightlies: will be replaced by CmPhoneWindowManager's new volume handling
+                if ((isMusicActive() || isFmActive()) && ((result & ACTION_PASS_TO_USER) == 0)) {
+                     if (mVolBtnMusicControls && down) {
+                         mIsLongPress = false;
+                         handleVolumeLongPress(keyCode);
+                         break;
+                     } else {
+                         if (mVolBtnMusicControls && !down) {
+                            handleVolumeLongPressAbort();
+                            if (mIsLongPress) {
+                                break;
                             }
                         }
-                    }
+                        if (!isScreenOn && !mVolumeWakeScreen) {
+                            // If music is playing but we decided not to pass the key to the
+                            // application, handle the volume change here.
+                            int stream = isMusicActive() ?
+                                    AudioManager.STREAM_MUSIC : AudioManager.STREAM_FM;
+                            handleVolumeKey(stream, keyCode);
+                        }
+                     }
                 }
-                break;
+                if (isScreenOn || !mVolumeWakeScreen) {
+                    break;
+                } else if (keyguardActive) {
+                    keyCode = KeyEvent.KEYCODE_POWER;
+                    mKeyguardMediator.onWakeKeyWhenKeyguardShowingTq(keyCode);
+                } else {
+                    result |= ACTION_POKE_USER_ACTIVITY;
+                    break;
+                }
             }
 
             case KeyEvent.KEYCODE_CAMERA: {
@@ -2732,10 +2830,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 result &= ~ACTION_PASS_TO_USER;
                 if (down) {
-                    if (mVolumeDownTriggered) {
-                            mPowerKeyHandled = true;
+                    if (isScreenOn && !mPowerKeyTriggered) {
+                        mPowerKeyTriggered = true;
+                        mPowerKeyTime = 150;
+                        interceptScreenshotChord();
                     }
-                    mPowerDownTriggered = true;
 
                     ITelephony telephonyService = getTelephonyService();
                     boolean hungUp = false;
@@ -2756,12 +2855,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             Log.w(TAG, "ITelephony threw RemoteException", ex);
                         }
                     }
-                    interceptPowerKeyDown(!isScreenOn || hungUp);
+                    interceptPowerKeyDown(!isScreenOn || hungUp || mVolumeDownKeyTriggered || mVolumeUpKeyTriggered);
                 } else {
-                    mPowerDownTriggered = false;
-                    if (interceptPowerKeyUp(canceled)) {
+                    mPowerKeyTriggered = false;
+                    cancelPendingScreenshotChordAction();
+                    if (interceptPowerKeyUp(canceled || mPendingPowerKeyUpCanceled)) {
                         result = (result & ~ACTION_POKE_USER_ACTIVITY) | ACTION_GO_TO_SLEEP;
                     }
+                    mPendingPowerKeyUpCanceled = false;
                 }
                 break;
             }
@@ -2990,6 +3091,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     public boolean inKeyguardRestrictedKeyInputMode() {
         if (mKeyguardMediator == null) return false;
         return mKeyguardMediator.isInputRestricted();
+    }
+
+    public void dismissKeyguardLw() {
+        if (!mKeyguardMediator.isSecure()) {
+            if (mKeyguardMediator.isShowing()) {
+                mHandler.post(new Runnable() {
+                    public void run() {
+                        mKeyguardMediator.keyguardDone(false, true);
+                    }
+                });
+            }
+        }
     }
 
     void sendCloseSystemWindows() {
@@ -3411,7 +3524,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         int result = ActivityManagerNative.getDefault()
                                 .startActivity(null, dock,
                                         dock.resolveTypeIfNeeded(mContext.getContentResolver()),
-                                        null, 0, null, null, 0, true /* onlyIfNeeded*/, false);
+                                        null, 0, null, null, 0, true /* onlyIfNeeded*/, false,
+                                        null, null, false);
                         if (result == IActivityManager.START_RETURN_INTENT_TO_CALLER) {
                             return false;
                         }
@@ -3420,7 +3534,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 int result = ActivityManagerNative.getDefault()
                         .startActivity(null, mHomeIntent,
                                 mHomeIntent.resolveTypeIfNeeded(mContext.getContentResolver()),
-                                null, 0, null, null, 0, true /* onlyIfNeeded*/, false);
+                                null, 0, null, null, 0, true /* onlyIfNeeded*/, false,
+                                null, null, false);
                 if (result == IActivityManager.START_RETURN_INTENT_TO_CALLER) {
                     return false;
                 }

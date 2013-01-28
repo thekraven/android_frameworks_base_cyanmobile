@@ -32,5 +32,7 @@ oneway interface IStatusBar
     void animateCollapse();
     void setIMEVisible(boolean visible);
     void showNaviBar(boolean visible);
+    void toggleQwikWidgets();
+    void toggleRingPanel();
 }
 

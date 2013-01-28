@@ -189,6 +189,7 @@ class ContextImpl extends Context {
 
     private AudioManager mAudioManager;
     /*package*/ LoadedApk mPackageInfo;
+    private String mBasePackageName;
     private Resources mResources;
     /*package*/ ActivityThread mMainThread;
     private Context mOuterContext;
@@ -669,6 +670,19 @@ class ContextImpl extends Context {
     }
 
     @Override
+    public void startActivities(Intent[] intents) {
+        if ((intents[0].getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
+            throw new AndroidRuntimeException(
+                    "Calling startActivities() from outside of an Activity "
+                    + " context requires the FLAG_ACTIVITY_NEW_TASK flag on first Intent."
+                    + " Is this really what you want?");
+        }
+        mMainThread.getInstrumentation().execStartActivities(
+            getOuterContext(), mMainThread.getApplicationThread(), null,
+            (Activity)null, intents);
+    }
+
+    @Override
     public void startIntentSender(IntentSender intent,
             Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags)
             throws IntentSender.SendIntentException {
@@ -846,7 +860,7 @@ class ContextImpl extends Context {
         }
         try {
             return ActivityManagerNative.getDefault().registerReceiver(
-                    mMainThread.getApplicationThread(),
+                    mMainThread.getApplicationThread(), mBasePackageName,
                     rd, filter, broadcastPermission);
         } catch (RemoteException e) {
             return null;
@@ -911,6 +925,12 @@ class ContextImpl extends Context {
             throw new RuntimeException("Not supported in system context");
         }
         try {
+            IBinder token = getActivityToken();
+            if (token == null && (flags&BIND_AUTO_CREATE) == 0 && mPackageInfo != null
+                    && mPackageInfo.getApplicationInfo().targetSdkVersion
+                    < android.os.Build.VERSION_CODES.HONEYCOMB) {
+                flags |= BIND_WAIVE_PRIORITY;
+            }
             int res = ActivityManagerNative.getDefault().bindService(
                 mMainThread.getApplicationThread(), getActivityToken(),
                 service, service.resolveTypeIfNeeded(getContentResolver()),
@@ -1533,7 +1553,7 @@ class ContextImpl extends Context {
         if (pi != null) {
             ContextImpl c = new ContextImpl();
             c.mRestricted = (flags & CONTEXT_RESTRICTED) == CONTEXT_RESTRICTED;
-            c.init(pi, null, mMainThread, mResources);
+            c.init(pi, null, mMainThread, mResources, mBasePackageName);
             if (c.mResources != null) {
                 return c;
             }
@@ -1589,6 +1609,7 @@ class ContextImpl extends Context {
     public ContextImpl(ContextImpl context) {
         ++sInstanceCount;
         mPackageInfo = context.mPackageInfo;
+        mBasePackageName = context.mBasePackageName;
         mResources = context.mResources;
         mMainThread = context.mMainThread;
         mContentResolver = context.mContentResolver;
@@ -1597,13 +1618,14 @@ class ContextImpl extends Context {
 
     final void init(LoadedApk packageInfo,
             IBinder activityToken, ActivityThread mainThread) {
-        init(packageInfo, activityToken, mainThread, null);
+        init(packageInfo, activityToken, mainThread, null, null);
     }
 
     final void init(LoadedApk packageInfo,
                 IBinder activityToken, ActivityThread mainThread,
-                Resources container) {
+                Resources container, String basePackageName) {
         mPackageInfo = packageInfo;
+        mBasePackageName = basePackageName != null ? basePackageName : packageInfo.mPackageName;
         mResources = mPackageInfo.getResources(mainThread);
 
         if (mResources != null && container != null
@@ -1624,6 +1646,7 @@ class ContextImpl extends Context {
 
     final void init(Resources resources, ActivityThread mainThread) {
         mPackageInfo = null;
+        mBasePackageName = null;
         mResources = resources;
         mMainThread = mainThread;
         mContentResolver = new ApplicationContentResolver(this, mainThread);
@@ -1799,8 +1822,6 @@ class ContextImpl extends Context {
                 return null;
             }
             Intent intent = new Intent(intentToResolve);
-            intent.setClassName(resolveInfo.activityInfo.applicationInfo.packageName,
-                                resolveInfo.activityInfo.name);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             return intent;
         }

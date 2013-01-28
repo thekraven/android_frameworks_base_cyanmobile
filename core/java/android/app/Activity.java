@@ -18,7 +18,7 @@ package android.app;
 
 import com.android.internal.policy.PolicyManager;
 
-import android.content.ComponentCallbacks;
+import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -594,7 +594,7 @@ import java.util.HashMap;
 public class Activity extends ContextThemeWrapper
         implements LayoutInflater.Factory,
         Window.Callback, KeyEvent.Callback,
-        OnCreateContextMenuListener, ComponentCallbacks {
+        OnCreateContextMenuListener, ComponentCallbacks2 {
     private static final String TAG = "Activity";
 
     /** Standard activity result: operation canceled. */
@@ -801,6 +801,7 @@ public class Activity extends ContextThemeWrapper
     protected void onCreate(Bundle savedInstanceState) {
         mVisibleFromClient = !mWindow.getWindowStyle().getBoolean(
                 com.android.internal.R.styleable.Window_windowNoDisplay, false);
+        getApplication().dispatchActivityCreated(this, savedInstanceState);
         mCalled = true;
     }
 
@@ -933,6 +934,7 @@ public class Activity extends ContextThemeWrapper
      */
     protected void onStart() {
         mCalled = true;
+        getApplication().dispatchActivityStarted(this);
     }
 
     /**
@@ -980,6 +982,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onPause
      */
     protected void onResume() {
+        getApplication().dispatchActivityResumed(this);
         mCalled = true;
     }
 
@@ -1085,6 +1088,7 @@ public class Activity extends ContextThemeWrapper
      */
     protected void onSaveInstanceState(Bundle outState) {
         outState.putBundle(WINDOW_HIERARCHY_TAG, mWindow.saveHierarchyState());
+        getApplication().dispatchActivitySaveInstanceState(this, outState);
     }
 
     /**
@@ -1161,6 +1165,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onStop
      */
     protected void onPause() {
+        getApplication().dispatchActivityPaused(this);
         mCalled = true;
     }
 
@@ -1282,6 +1287,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onDestroy
      */
     protected void onStop() {
+        getApplication().dispatchActivityStopped(this);
         mCalled = true;
     }
 
@@ -1344,6 +1350,8 @@ public class Activity extends ContextThemeWrapper
         if (mSearchManager != null) {
             mSearchManager.stopSearch();
         }
+
+        getApplication().dispatchActivityDestroyed(this);
     }
 
     /**
@@ -1492,7 +1500,11 @@ public class Activity extends ContextThemeWrapper
     public void onLowMemory() {
         mCalled = true;
     }
-    
+
+    public void onTrimMemory(int level) {
+        mCalled = true;
+    }
+
     /**
      * Wrapper around
      * {@link ContentResolver#query(android.net.Uri , String[], String, String[], String)}
@@ -2946,6 +2958,30 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
+     * Launch a new activity.  You will not receive any information about when
+     * the activity exits.  This implementation overrides the base version,
+     * providing information about
+     * the activity performing the launch.  Because of this additional
+     * information, the {@link Intent#FLAG_ACTIVITY_NEW_TASK} launch flag is not
+     * required; if not specified, the new activity will be added to the
+     * task of the caller.
+     *
+     * <p>This method throws {@link android.content.ActivityNotFoundException}
+     * if there was no Activity found to run the given Intent.
+     *
+     * @param intents The intents to start.
+     *
+     * @throws android.content.ActivityNotFoundException
+     *
+     * @see #startActivityForResult
+     */
+    @Override
+    public void startActivities(Intent[] intents) {
+        mInstrumentation.execStartActivities(this, mMainThread.getApplicationThread(),
+                mToken, this, intents);
+    }
+
+    /**
      * Like {@link #startActivity(Intent)}, but taking a IntentSender
      * to start; see
      * {@link #startIntentSenderForResult(IntentSender, int, Intent, int, int, int)}
@@ -3003,7 +3039,8 @@ public class Activity extends ContextThemeWrapper
                             intent, intent.resolveTypeIfNeeded(
                                     getContentResolver()),
                             null, 0,
-                            mToken, mEmbeddedID, requestCode, true, false);
+                            mToken, mEmbeddedID, requestCode, true, false,
+                            null, null, false);
             } catch (RemoteException e) {
                 // Empty
             }
@@ -3385,7 +3422,7 @@ public class Activity extends ContextThemeWrapper
                 ActivityManagerNative.getDefault().getIntentSender(
                         IActivityManager.INTENT_SENDER_ACTIVITY_RESULT, packageName,
                         mParent == null ? mToken : mParent.mToken,
-                        mEmbeddedID, requestCode, data, null, flags);
+                        mEmbeddedID, requestCode, new Intent[] { data }, null, flags);
             return target != null ? new PendingIntent(target) : null;
         } catch (RemoteException e) {
             // Empty
@@ -3861,13 +3898,13 @@ public class Activity extends ContextThemeWrapper
     final void performPause() {
         mCalled = false;
         onPause();
+        mResumed = false;
         if (!mCalled && getApplicationInfo().targetSdkVersion
                 >= android.os.Build.VERSION_CODES.GINGERBREAD) {
             throw new SuperNotCalledException(
                     "Activity " + mComponent.toShortString() +
                     " did not call through to super.onPause()");
         }
-        mResumed = false;
     }
     
     final void performUserLeaving() {

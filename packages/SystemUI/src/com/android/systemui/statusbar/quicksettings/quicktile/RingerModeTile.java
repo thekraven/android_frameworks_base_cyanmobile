@@ -44,7 +44,8 @@ public class RingerModeTile extends QuickSettingsTile {
     private int mRingerValuesIndex = 2;
 
     private AudioManager mAudioManager;
-    protected Vibrator mVibrator;
+
+    private boolean mHeadsetPlugged = false;
 
     public RingerModeTile(Context context, LayoutInflater inflater,
             QuickSettingsContainerView container, QuickSettingsController qsc) {
@@ -74,6 +75,7 @@ public class RingerModeTile extends QuickSettingsTile {
                 return true;
             }
         };
+        qsc.registerAction(Intent.ACTION_HEADSET_PLUG, this);
         qsc.registerAction(AudioManager.RINGER_MODE_CHANGED_ACTION, this);
         qsc.registerAction(AudioManager.VIBRATE_SETTING_CHANGED_ACTION, this);
         qsc.registerObservedContent(Settings.System.getUriFor(Settings.System.EXPANDED_RING_MODE)
@@ -84,6 +86,10 @@ public class RingerModeTile extends QuickSettingsTile {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if (action.equals(Intent.ACTION_HEADSET_PLUG)) {
+            mHeadsetPlugged = intent.getIntExtra("state", 0) == 1;
+        }
         applyVibrationChanges();
     }
 
@@ -112,11 +118,11 @@ public class RingerModeTile extends QuickSettingsTile {
                 mLabel = mContext.getString(R.string.quick_settings_vibrate);
                 break;
             case 2:
-                mDrawable = R.drawable.ic_qs_ring_on;
+                mDrawable = mHeadsetPlugged ? R.drawable.ic_qs_headset : R.drawable.ic_qs_ring_on;
                 mLabel = mContext.getString(R.string.quick_settings_ringer_onn);
                 break;
             case 3:
-                mDrawable = R.drawable.ic_qs_ring_vibrate_on;
+                mDrawable = mHeadsetPlugged ? R.drawable.ic_qs_headset : R.drawable.ic_qs_ring_vibrate_on;
                 mLabel = mContext.getString(R.string.quick_settings_ringer_vibrate);
                 break;
         }
@@ -207,6 +213,9 @@ public class RingerModeTile extends QuickSettingsTile {
 
             mAudioManager.setVibrateSetting(AudioManager.VIBRATE_TYPE_RINGER, mVibrateSetting);
             mAudioManager.setRingerMode(mRingerMode);
+            if (mDoHapticFeedback && mHapticFeedback) {
+                mVibrator.vibrate(VIBRATE_DURATION);
+            }
         }
 
         @Override
