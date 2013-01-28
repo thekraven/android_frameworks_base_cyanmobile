@@ -104,6 +104,7 @@ xmlns:tabunlock="http://schemas.android.com/apk/res/com.android.tabunlock"
                     android:layout_gravity="center_horizontal"
                     android:gravity="center" 
                     android:scaleType="centerCrop"
+					android:padding="4dip" 
                     />
                 <TextView android:id="@+id/timeDisplay"
                     android:layout_width="wrap_content"
@@ -314,6 +315,8 @@ xmlns:tabunlock="http://schemas.android.com/apk/res/com.android.tabunlock"
             android:id="@+id/waveBebe_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:layout_alignParentBottom="true"
             />
 
     <com.android.internal.widget.multiwaveview.MultiWaveView
