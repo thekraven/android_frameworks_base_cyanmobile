@@ -102,7 +102,6 @@ SurfaceFlinger::SurfaceFlinger()
         mDebugInTransaction(0),
         mLastTransactionTime(0),
         mBootFinished(false),
-        mConsoleSignals(0),
         mSecureFrameBuffer(0),
         mUseDithering(0),
         mUse16bppAlpha(false)
@@ -200,7 +199,9 @@ void SurfaceFlinger::bootFinished()
     const nsecs_t duration = now - mBootTime;
     LOGI("Boot is finished (%ld ms)", long(ns2ms(duration)) );  
     mBootFinished = true;
-    property_set("ctl.stop", "bootanim");
+    // formerly we would just kill the process, but we now ask it to exit so it
+    // can choose where to stop the animation.	
+    property_set("service.bootanim.exit", "1");
 }
 
 void SurfaceFlinger::onFirstRef()
@@ -304,9 +305,15 @@ status_t SurfaceFlinger::readyToRun()
      */
 
     // start boot animation
-    property_set("ctl.start", "bootanim");
+    startBootAnim();
     
     return NO_ERROR;
+}
+
+void SurfaceFlinger::startBootAnim() {
+    // start boot animation
+    property_set("service.bootanim.exit", "0");
+    property_set("ctl.start", "bootanim");
 }
 
 // ----------------------------------------------------------------------------
@@ -394,11 +401,6 @@ bool SurfaceFlinger::threadLoop()
     // call Layer's destructor
     handleDestroyLayers();
 
-    // check for transactions
-    if (UNLIKELY(mConsoleSignals)) {
-        handleConsoleEvents();
-    }
-
     if (LIKELY(mTransactionCount == 0)) {
         // if we're in a global transaction, don't do anything.
         const uint32_t mask = eTransactionNeeded | eTraversalNeeded;
@@ -469,28 +471,6 @@ void SurfaceFlinger::postFramebuffer()
         mDebugInSwapBuffers = 0;
         mInvalidRegion.clear();
     }
-}
-
-void SurfaceFlinger::handleConsoleEvents()
-{
-    // something to do with the console
-    const DisplayHardware& hw = graphicPlane(0).displayHardware();
-
-    int what = android_atomic_and(0, &mConsoleSignals);
-    if (what & eConsoleAcquired) {
-        hw.acquireScreen();
-        // this is a temporary work-around, eventually this should be called
-        // by the power-manager
-        SurfaceFlinger::turnElectronBeamOn(mElectronBeamAnimationMode);
-    }
-
-    if (what & eConsoleReleased) {
-        if (hw.isScreenAcquired()) {
-            hw.releaseScreen();
-        }
-    }
-
-    mDirtyRegion.set(hw.bounds());
 }
 
 void SurfaceFlinger::handleTransaction(uint32_t transactionFlags)
@@ -1447,18 +1427,52 @@ status_t SurfaceFlinger::setClientState(
     return NO_ERROR;
 }
 
-void SurfaceFlinger::screenReleased(int dpy)
-{
-    // this may be called by a signal handler, we can't do too much in here
-    android_atomic_or(eConsoleReleased, &mConsoleSignals);
-    signalEvent();
+// ---------------------------------------------------------------------------
+
+void SurfaceFlinger::onScreenAcquired() {
+    const DisplayHardware& hw(graphicPlane(0).displayHardware());
+    hw.acquireScreen();
+    // this is a temporary work-around, eventually this should be called
+    // by the power-manager
+    SurfaceFlinger::turnElectronBeamOn(mElectronBeamAnimationMode);
+    // from this point on, SF will priocess updates again
+    triggerScreenRepaint();
 }
 
-void SurfaceFlinger::screenAcquired(int dpy)
-{
-    // this may be called by a signal handler, we can't do too much in here
-    android_atomic_or(eConsoleAcquired, &mConsoleSignals);
-    signalEvent();
+void SurfaceFlinger::onScreenReleased() {
+    const DisplayHardware& hw(graphicPlane(0).displayHardware());
+    if (hw.isScreenAcquired()) {
+        hw.releaseScreen();
+        // from this point on, SF will stop drawing
+    }
+}
+
+void SurfaceFlinger::screenAcquired() {
+    class MessageScreenAcquired : public MessageBase {	
+        SurfaceFlinger* flinger;
+    public:
+        MessageScreenAcquired(SurfaceFlinger* flinger) : flinger(flinger) { }
+        virtual bool handler() {
+            flinger->onScreenAcquired();
+            return true;
+        }
+    };
+    sp<MessageBase> msg = new MessageScreenAcquired(this);
+    postMessageSync(msg);
+}
+
+void SurfaceFlinger::screenReleased() {
+    class MessageScreenReleased : public MessageBase {
+        SurfaceFlinger* flinger;
+    public:
+        MessageScreenReleased(SurfaceFlinger* flinger) : flinger(flinger) { }
+        virtual bool handler() {
+            flinger->onScreenReleased();
+            return true;
+        }
+    };
+    sp<MessageBase> msg = new MessageScreenReleased(this);
+    postMessageSync(msg);
 }
 
 status_t SurfaceFlinger::dump(int fd, const Vector<String16>& args)
@@ -1732,7 +1746,7 @@ status_t SurfaceFlinger::renderScreenToTextureLocked(DisplayID dpy,
     // redraw the screen entirely...
     glClearColor(0,0,0,1);
     glClear(GL_COLOR_BUFFER_BIT);
-    glMatrixMode(GL_MODELVIEW);
+    glMatrixMode(GL_MODELVIEW);	
     glLoadIdentity();
     const Vector< sp<LayerBase> >& layers(mVisibleLayersSortedByZ);
     const size_t count = layers.size();
@@ -1949,8 +1963,8 @@ status_t SurfaceFlinger::electronBeamOffAnimationImplLocked()
         : hw_w(hw_w), hw_h(hw_h) {
         }
         void operator()(GLfloat* vtx, float v) {
-            const GLfloat w = hw_w - (hw_w * v);
-            const GLfloat h = hw_h + (hw_h * v);
+            const GLfloat w = hw_w + (hw_w * v);
+            const GLfloat h = hw_h - (hw_h * v);
             const GLfloat x = (hw_w - w) * 0.5f;
             const GLfloat y = (hw_h - h) * 0.5f;
             vtx[0] = x;         vtx[1] = y;
@@ -1967,8 +1981,8 @@ status_t SurfaceFlinger::electronBeamOffAnimationImplLocked()
         : hw_w(hw_w), hw_h(hw_h) {
         }
         void operator()(GLfloat* vtx, float v) {
-            const GLfloat w = 1.0f;
-            const GLfloat h = hw_h - (hw_h * v);
+            const GLfloat w = hw_w - (hw_w * v);
+            const GLfloat h = 1.0f;
             const GLfloat x = (hw_w - w) * 0.5f;
             const GLfloat y = (hw_h - h) * 0.5f;
             vtx[0] = x;         vtx[1] = y;
@@ -1981,10 +1995,10 @@ status_t SurfaceFlinger::electronBeamOffAnimationImplLocked()
     // the full animation is 2*ELECTRONBEAM_FRAMES frames
     const int nbValFrames = ELECTRONBEAM_FRAMES;
     char value[PROPERTY_VALUE_MAX];
-    property_get("debug.sf.electron_frames", value, "12");
+    property_get("debug.sf.electron_frames", value, "24");
     int nbFrames = (atoi(value) + 1) >> 1;
-    if (nbFrames >= nbValFrames) // just in case
-        nbFrames = nbValFrames;
+    if (nbFrames <= 0) // just in case
+        nbFrames = 24;
 
     s_curve_interpolator itr(nbFrames, 7.5f);
     s_curve_interpolator itg(nbFrames, 8.0f);
@@ -1992,9 +2006,9 @@ status_t SurfaceFlinger::electronBeamOffAnimationImplLocked()
 
     v_stretch vverts(hw_w, hw_h);
 
-    glMatrixMode(GL_TEXTURE);
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
+    glMatrixMode(GL_TEXTURE);    	
+    glLoadIdentity();  	
+    glMatrixMode(GL_MODELVIEW);   	
     glLoadIdentity();
 
     glEnable(GL_BLEND);
@@ -2590,6 +2604,25 @@ sp<Layer> SurfaceFlinger::getLayer(const sp<ISurface>& sur) const
     Mutex::Autolock _l(mStateLock);
     result = mLayerMap.valueFor( sur->asBinder() ).promote();
     return result;
+}
+
+// ---------------------------------------------------------------------------
+
+sp<GraphicBuffer> SurfaceFlinger::createGraphicBuffer(uint32_t w, uint32_t h,
+        PixelFormat format, uint32_t usage) const {
+    // XXX: HACK HACK HACK!!!  This should NOT be static, but it is to fix a
+    // race between SurfaceFlinger unref'ing the buffer and the client ref'ing
+    // it.
+    static sp<GraphicBuffer> graphicBuffer(new GraphicBuffer(w, h, format, usage));
+    status_t err = graphicBuffer->initCheck();
+    if (err != 0) {
+        LOGE("createGraphicBuffer: init check failed: %d", err);
+        return 0;	
+    } else if (graphicBuffer->handle == 0) {
+        LOGE("createGraphicBuffer: unable to create GraphicBuffer");
+        return 0;
+    }
+    return graphicBuffer;
 }
 
 // ---------------------------------------------------------------------------

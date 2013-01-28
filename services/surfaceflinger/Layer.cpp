@@ -805,11 +805,13 @@ status_t Layer::BufferManager::resize(size_t size,
     Mutex::Autolock _l(mLock);
 
     if (size < mNumBuffers) {
-        // Move the active texture into slot 0
-        BufferData activeBufferData = mBufferData[mActiveBuffer];
-        mBufferData[mActiveBuffer] = mBufferData[0];
-        mBufferData[0] = activeBufferData;
-        mActiveBuffer = 0;
+        // If there is an active texture, move it into slot 0 if needed
+        if (mActiveBuffer > 0) {
+            BufferData activeBufferData = mBufferData[mActiveBuffer];
+            mBufferData[mActiveBuffer] = mBufferData[0];
+            mBufferData[0] = activeBufferData;
+            mActiveBuffer = 0;
+        }
 
         // Free the buffers that are no longer needed.
         for (size_t i = size; i < mNumBuffers; i++) {

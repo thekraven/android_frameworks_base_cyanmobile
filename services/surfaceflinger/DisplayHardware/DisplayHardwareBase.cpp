@@ -80,44 +80,24 @@ DisplayHardwareBase::DisplayEventThread::~DisplayEventThread()
 
 bool DisplayHardwareBase::DisplayEventThread::threadLoop()
 {
-    int err = 0;
-    char buf;
-    int fd;
-
-    fd = open(kSleepFileName, O_RDONLY, 0);
-    do {
-      err = read(fd, &buf, 1);
-    } while (err < 0 && errno == EINTR);
-    close(fd);
-    LOGW_IF(err<0, "ANDROID_WAIT_FOR_FB_SLEEP failed (%s)", strerror(errno));
-    if (err >= 0) {
+    if (waitForFbSleep() == NO_ERROR) {
         sp<SurfaceFlinger> flinger = mFlinger.promote();
         LOGD("About to give-up screen, flinger = %p", flinger.get());
         if (flinger != 0) {
-            mBarrier.close();
-            flinger->screenReleased(0);
-            mBarrier.wait();
+            flinger->screenReleased();
+        }
+        if (waitForFbWake() == NO_ERROR) {
+            sp<SurfaceFlinger> flinger = mFlinger.promote();
+            LOGD("Screen about to return, flinger = %p", flinger.get());
+            if (flinger != 0) {
+                flinger->screenAcquired();
+            }
+            return true;
         }
     }
-    fd = open(kWakeFileName, O_RDONLY, 0);
-    do {
-      err = read(fd, &buf, 1);
-    } while (err < 0 && errno == EINTR);
-    close(fd);
-    LOGW_IF(err<0, "ANDROID_WAIT_FOR_FB_WAKE failed (%s)", strerror(errno));
-    if (err >= 0) {
-        sp<SurfaceFlinger> flinger = mFlinger.promote();
-        LOGD("Screen about to return, flinger = %p", flinger.get());
-        if (flinger != 0)
-            flinger->screenAcquired(0);
-    }
-    return true;
-}
 
-status_t DisplayHardwareBase::DisplayEventThread::releaseScreen() const
-{
-    mBarrier.open();
-    return NO_ERROR;
+    // error, exit the thread
+    return false;
 }
 
 status_t DisplayHardwareBase::DisplayEventThread::readyToRun()
@@ -140,6 +120,32 @@ status_t DisplayHardwareBase::DisplayEventThread::initCheck() const
             (access(kOldSleepFileName, R_OK) == 0 &&
             access(kOldWakeFileName, R_OK) == 0)) &&
             access(kFbconSysDir, F_OK) != 0) ? NO_ERROR : NO_INIT;
+}
+
+status_t DisplayHardwareBase::DisplayEventThread::waitForFbSleep() {
+    int err = 0;
+    char buf;
+    int fd = open(kSleepFileName, O_RDONLY, 0);
+    // if the file doesn't exist, the error will be caught in read() below
+    do {
+        err = read(fd, &buf, 1);
+    } while (err < 0 && errno == EINTR);
+    close(fd);
+    LOGE_IF(err<0, "*** ANDROID_WAIT_FOR_FB_SLEEP failed (%s)", strerror(errno));
+    return err < 0 ? -errno : int(NO_ERROR);
+}
+
+status_t DisplayHardwareBase::DisplayEventThread::waitForFbWake() {
+    int err = 0;
+    char buf;
+    int fd = open(kWakeFileName, O_RDONLY, 0);
+    // if the file doesn't exist, the error will be caught in read() below
+    do {
+        err = read(fd, &buf, 1);
+    } while (err < 0 && errno == EINTR);
+    close(fd);
+    LOGE_IF(err<0, "*** ANDROID_WAIT_FOR_FB_WAKE failed (%s)", strerror(errno));
+    return err < 0 ? -errno : int(NO_ERROR);
 }
 
 // ----------------------------------------------------------------------------
@@ -339,12 +345,12 @@ bool DisplayHardwareBase::ConsoleManagerThread::threadLoop()
         sp<SurfaceFlinger> flinger = mFlinger.promote();
         //LOGD("About to give-up screen, flinger = %p", flinger.get());
         if (flinger != 0)
-            flinger->screenReleased(0);
+            flinger->screenReleased();
     } else if (sig == vm.acqsig) {
         sp<SurfaceFlinger> flinger = mFlinger.promote();
         //LOGD("Screen about to return, flinger = %p", flinger.get());
         if (flinger != 0) 
-            flinger->screenAcquired(0);
+            flinger->screenAcquired();
     }
     
     return true;
@@ -359,8 +365,8 @@ status_t DisplayHardwareBase::ConsoleManagerThread::initCheck() const
 
 DisplayHardwareBase::DisplayHardwareBase(const sp<SurfaceFlinger>& flinger,
         uint32_t displayIndex) 
-    : mScreenAcquired(true)
 {
+    mScreenAcquired = true;
     mDisplayEventThread = new DisplayEventThread(flinger);
     if (mDisplayEventThread->initCheck() != NO_ERROR) {
         // fall-back on the console
@@ -381,18 +387,12 @@ bool DisplayHardwareBase::canDraw() const
 
 void DisplayHardwareBase::releaseScreen() const
 {
-    status_t err = mDisplayEventThread->releaseScreen();
-    if (err >= 0) {
-        mScreenAcquired = false;
-    }
+    mScreenAcquired = false;
 }
 
 void DisplayHardwareBase::acquireScreen() const
 {
-    status_t err = mDisplayEventThread->acquireScreen();
-    if (err >= 0) {
-        mScreenAcquired = true;
-    }
+    mScreenAcquired = true;
 }
 
 bool DisplayHardwareBase::isScreenAcquired() const
