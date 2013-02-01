@@ -188,12 +188,6 @@ DefaultKeyedVector<KEY,VALUE>::DefaultKeyedVector(const VALUE& defValue)
 {
 }
 
-template<typename KEY, typename VALUE> inline
-const VALUE& DefaultKeyedVector<KEY,VALUE>::valueFor(const KEY& key) const {
-    ssize_t i = indexOfKey(key);
-    return i >= 0 ? KeyedVector<KEY,VALUE>::valueAt(i) : mDefault;
-}
-
 }; // namespace android
 
 // ---------------------------------------------------------------------------
