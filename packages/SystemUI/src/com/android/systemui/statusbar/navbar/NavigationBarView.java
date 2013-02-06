@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-package com.android.systemui.statusbar;
+package com.android.systemui.statusbar.navbar;
 
-import com.android.internal.statusbar.IStatusBarService;
 import java.net.URISyntaxException;
 import android.content.Context;
 import android.content.Intent;
@@ -42,7 +41,6 @@ import android.view.ViewGroup;
 import android.view.Surface;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
-import android.widget.ImageButton;
 import android.widget.Toast;
 import android.content.ContentResolver;
 import android.content.res.Configuration;
@@ -54,18 +52,19 @@ import android.os.Handler;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 
+import com.android.systemui.statusbar.StatusBarService;
+import com.android.systemui.statusbar.CmStatusBarView;
 import com.android.systemui.statusbar.popups.ActionItem;
 import com.android.systemui.statusbar.popups.QuickAction;
 import com.android.systemui.R;
 
 public class NavigationBarView extends LinearLayout {
-    final Display mDisplay;
+
+    public StatusBarService mServices;
+
+    private final Display mDisplay;
     private static final boolean DEBUG = false;
     private static final String TAG = "NavigationBarView";
-
-    public static final int KEYCODE_VIRTUAL_HOME_LONG=KeyEvent.getMaxKeyCode()+1;
-    public static final int KEYCODE_VIRTUAL_BACK_LONG=KeyEvent.getMaxKeyCode()+2;
-    public static final int KEYCODE_VIRTUAL_POWER_LONG=KeyEvent.getMaxKeyCode()+3;
 
     private static final int ID_APPLICATION = 1;
     private static final int ID_DISPLAY = 2;
@@ -103,16 +102,16 @@ public class NavigationBarView extends LinearLayout {
     private static final int SWIPE_THRESHOLD_VELOCITY = 100;
     private GestureDetector mGestureDetector;
 
-    View mNaviBackground;
-    View mNaviAdd;
-    ViewGroup mSoftButtons;
-    ImageButton mHomeButton;
-    ImageButton mMenuButton;
-    ImageButton mBackButton;
-    ImageButton mSearchButton;
-    ImageButton mVolUpButton;
-    ImageButton mVolDownButton;
-    ImageButton mQuickButton;
+    private View mNaviBackground;
+    private View mNaviAdd;
+    private ViewGroup mSoftButtons;
+    private KeyButtonView mHomeButton;
+    private KeyButtonView mMenuButton;
+    private KeyButtonView mBackButton;
+    private KeyButtonView mSearchButton;
+    private KeyButtonView mVolUpButton;
+    private KeyButtonView mVolDownButton;
+    private KeyButtonView mQuickButton;
 
     private int mNVColor;
     private int mNext;
@@ -121,14 +120,12 @@ public class NavigationBarView extends LinearLayout {
     private boolean mNVShow;
     private boolean mShowNV;
     private boolean mShowVol;
-    private boolean mOverColorEnable;
     private int mShowAnimate;
     private int mShowHome;
     private int mShowMenu;
     private int mShowBack;
     private int mShowSearch;
     private int mShowQuicker;
-    private int mOverColor;
     private boolean mLongPressBackKills;
     private boolean mInputShow;
     private Bitmap mCustomHomeIcon;
@@ -145,7 +142,6 @@ public class NavigationBarView extends LinearLayout {
     private Bitmap mQuickIcon;
     private Bitmap mVolUpIcon;
     private Bitmap mVolDownIcon;
-    private Bitmap mTouchIcon;
     private Bitmap mRecentIconNorm;
     private Bitmap mPowerIconNorm;
     private Bitmap mHomeIconNorm;
@@ -168,10 +164,9 @@ public class NavigationBarView extends LinearLayout {
     boolean mHidden = false;
     boolean mForceRotate = false;
     private boolean mDisableAnimate = false;
-    Handler mHandler;
-    IStatusBarService mStatusBarService;
+    private Handler mHandler;
 
-    class SettingsObserver extends ContentObserver {
+    private class SettingsObserver extends ContentObserver {
         SettingsObserver(Handler handler) {
             super(handler);
         }
@@ -197,10 +192,6 @@ public class NavigationBarView extends LinearLayout {
             resolver.registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.KILL_APP_LONGPRESS_BACK), false, this);
             resolver.registerContentObserver(
-                    Settings.System.getUriFor(Settings.System.ENABLE_OVERICON_COLOR), false, this);
-            resolver.registerContentObserver(
-                    Settings.System.getUriFor(Settings.System.OVERSCROLL_COLOR), false, this);
-            resolver.registerContentObserver(
                     Settings.System.getUriFor(Settings.System.WATCH_IS_NEXT), false, this);
             resolver.registerContentObserver(
                     Settings.System.getUriFor(Settings.System.WATCH_IS_PREVIOUS), false, this);
@@ -219,8 +210,6 @@ public class NavigationBarView extends LinearLayout {
             mShowSearch = Settings.System.getInt(resolver, Settings.System.NAVI_BUTTON_SHOW_SEARCH, 3);
             mShowQuicker = Settings.System.getInt(resolver, Settings.System.NAVI_BUTTON_SHOW_QUICKER, 4);
             mLongPressBackKills = (Settings.Secure.getInt(resolver, Settings.Secure.KILL_APP_LONGPRESS_BACK, 0) == 1);
-            mOverColorEnable = (Settings.System.getInt(resolver, Settings.System.ENABLE_OVERICON_COLOR, 1) == 1);
-            mOverColor = Settings.System.getInt(resolver, Settings.System.OVERICON_COLOR, defValuesColor);
             mShowAnimate = Settings.System.getInt(resolver, Settings.System.NAVI_BUTTONS_ANIMATE, 20000);
             mNext = Settings.System.getInt(resolver, Settings.System.WATCH_IS_NEXT, 0);
             mPrevious = Settings.System.getInt(resolver, Settings.System.WATCH_IS_PREVIOUS, 1);
@@ -244,48 +233,18 @@ public class NavigationBarView extends LinearLayout {
                         Math.abs(velocityX)>=SWIPE_THRESHOLD_VELOCITY &&
                         Math.abs(dX)>=SWIPE_MIN_DISTANCE ) {
                         if (dX>0) {
-                            mHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                     startExpandActivity();
-                                }
-                            });
+                            startExpandActivity();
                         } else {
-                            mHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                     startCollapseActivity();
-                                }
-                            });
+                            startCollapseActivity();
                         }
                         return true;
                     } else if (Math.abs(dX)<SWIPE_MAX_OFF_PATH &&
                         Math.abs(velocityY)>=SWIPE_THRESHOLD_VELOCITY &&
                         Math.abs(dY)>=SWIPE_MIN_DISTANCE ) {
                         if (dY>0) {
-                            mHandler.post(new Runnable() { public void run() {
-                                 try {
-                                     IStatusBarService statusbar = getStatusBarService();
-                                     if (statusbar != null) {
-                                         statusbar.toggleRingPanel();
-                                     }
-                                     } catch (RemoteException ex) {
-                                         // re-acquire status bar service next time it is needed.
-                                         mStatusBarService = null;
-                                     }
-                            }});
+                            mServices.toggleRingPanel();
                         } else {
-                            mHandler.post(new Runnable() { public void run() {
-                                 try {
-                                     IStatusBarService statusbar = getStatusBarService();
-                                     if (statusbar != null) {
-                                         statusbar.toggleRingPanel();
-                                     }
-                                     } catch (RemoteException ex) {
-                                         // re-acquire status bar service next time it is needed.
-                                         mStatusBarService = null;
-                                     }
-                            }});
+                            mServices.toggleRingPanel();
                         }
                         return true;
                     }
@@ -323,7 +282,6 @@ public class NavigationBarView extends LinearLayout {
             runIconQuick();
             runIconVolUp();
             runIconVolDown();
-            runIconTouch();
 	    ActionItem appItem = new ActionItem(ID_APPLICATION, "Application");
 	    ActionItem dispItem = new ActionItem(ID_DISPLAY, "Display");
             ActionItem inpItem = new ActionItem(ID_INPUT, "Input");
@@ -583,7 +541,7 @@ public class NavigationBarView extends LinearLayout {
 				ActionItem actionItem = quickAction.getActionItem(pos);
 				if (actionId == ID_BACKILL) {
                                     if (mLongPressBackKills) {
-                                        simulateKeypress(KEYCODE_VIRTUAL_BACK_LONG);
+                                        CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_BACK_LONG);
                                     } else {
                                         Toast toast = Toast.makeText(mContext, "Enable Kill app back button option to use this!",Toast.LENGTH_LONG);
                                         toast.show();
@@ -592,7 +550,7 @@ public class NavigationBarView extends LinearLayout {
                                     Intent intent = new Intent("android.intent.action.SCREENSHOT");
                                     getContext().sendBroadcast(intent);
                                 } else if (actionId == ID_POWERMENU) {
-                                    simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                                    CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
 				}
 			}
 		});
@@ -603,32 +561,29 @@ public class NavigationBarView extends LinearLayout {
 			}
                 });
 
-            mHomeButton = (ImageButton) findViewById(R.id.home);
-            mHomeButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mHomeButton = (KeyButtonView) findViewById(R.id.home);
+            mHomeButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                       if (mShowHome == 1) {
                         if (DEBUG) Slog.i(TAG, "Home clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_HOME);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 4) {
                         if (DEBUG) Slog.i(TAG, "Menu clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_MENU);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 2) {
                         if (DEBUG) Slog.i(TAG, "Back clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_BACK);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 3) {
                         if (DEBUG) Slog.i(TAG, "Search clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 5) {
                         if (DEBUG) Slog.i(TAG, "Quick clicked");
@@ -638,7 +593,6 @@ public class NavigationBarView extends LinearLayout {
                            mShowVol = true;
                         }
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 6) {
                             boolean mCustomHomeAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
@@ -649,26 +603,24 @@ public class NavigationBarView extends LinearLayout {
                                     Settings.System.USE_CUSTOM_HOME_APP_ACTIVITY));
                             }
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 7) {
                         if (DEBUG) Slog.i(TAG, "Power clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_POWER);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_POWER);
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       } else if (mShowHome == 8) {
                         if (DEBUG) Slog.i(TAG, "Recent clicked");
                         runTaskSwitcher();
                         updateNaviButtons();
-                        mHomeButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetHome, 80);
                       }
                     }
                 }
             );
             mHomeButton.setOnLongClickListener(
-                new ImageButton.OnLongClickListener() {
+                new KeyButtonView.OnLongClickListener() {
+	            @Override
                     public boolean onLongClick(View v) {
                           if (mShowHome == 1) {
                              Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -693,7 +645,7 @@ public class NavigationBarView extends LinearLayout {
 			     quickAction.setAnimStyle(QuickAction.ANIM_REFLECT);
                              return true;
                           } else if (mShowHome == 7) {
-                             simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                             CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
                              return true;
                           } else {
                              return false;
@@ -701,32 +653,29 @@ public class NavigationBarView extends LinearLayout {
                     }
                 }
             );
-            mMenuButton = (ImageButton) findViewById(R.id.menu);
-            mMenuButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mMenuButton = (KeyButtonView) findViewById(R.id.menu);
+            mMenuButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                       if (mShowMenu == 1) {
                         if (DEBUG) Slog.i(TAG, "Home clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_HOME);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 4) {
                         if (DEBUG) Slog.i(TAG, "Menu clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_MENU);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 2) {
                         if (DEBUG) Slog.i(TAG, "Back clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_BACK);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 3) {
                         if (DEBUG) Slog.i(TAG, "Search clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 5) {
                         if (DEBUG) Slog.i(TAG, "Quick clicked");
@@ -736,7 +685,6 @@ public class NavigationBarView extends LinearLayout {
                            mShowVol = true;
                         }
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 6) {
                             boolean mCustomMenuAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
@@ -747,26 +695,24 @@ public class NavigationBarView extends LinearLayout {
                                     Settings.System.USE_CUSTOM_MENU_APP_ACTIVITY));
                             }
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 7) {
                         if (DEBUG) Slog.i(TAG, "Power clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_POWER);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_POWER);
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       } else if (mShowMenu == 8) {
                         if (DEBUG) Slog.i(TAG, "Recent clicked");
                         runTaskSwitcher();
                         updateNaviButtons();
-                        mMenuButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetMenu, 80);
                       }
                     }
                 }
             );
             mMenuButton.setOnLongClickListener(
-                new ImageButton.OnLongClickListener() {
+                new KeyButtonView.OnLongClickListener() {
+	            @Override
                     public boolean onLongClick(View v) {
                           if (mShowMenu == 1) {
                              Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -791,7 +737,7 @@ public class NavigationBarView extends LinearLayout {
 			     quickAction.setAnimStyle(QuickAction.ANIM_REFLECT);
                              return true;
                           } else if (mShowMenu == 7) {
-                             simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                             CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
                              return true;
                           } else {
                              return false;
@@ -799,32 +745,29 @@ public class NavigationBarView extends LinearLayout {
                     }
                 }
             );
-            mBackButton = (ImageButton) findViewById(R.id.back);
-            mBackButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mBackButton = (KeyButtonView) findViewById(R.id.back);
+            mBackButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                       if (mShowBack == 1) {
                         if (DEBUG) Slog.i(TAG, "Home clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_HOME);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 4) {
                         if (DEBUG) Slog.i(TAG, "Menu clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_MENU);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 2) {
                         if (DEBUG) Slog.i(TAG, "Back clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_BACK);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 3) {
                         if (DEBUG) Slog.i(TAG, "Search clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 5) {
                         if (DEBUG) Slog.i(TAG, "Quick clicked");
@@ -834,7 +777,6 @@ public class NavigationBarView extends LinearLayout {
                            mShowVol = true;
                         }
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 6) {
                             boolean mCustomBackAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
@@ -845,26 +787,24 @@ public class NavigationBarView extends LinearLayout {
                                     Settings.System.USE_CUSTOM_BACK_APP_ACTIVITY));
                             }
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 7) {
                         if (DEBUG) Slog.i(TAG, "Power clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_POWER);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_POWER);
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       } else if (mShowBack == 8) {
                         if (DEBUG) Slog.i(TAG, "Recent clicked");
                         runTaskSwitcher();
                         updateNaviButtons();
-                        mBackButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetBack, 80);
                       }
                     }
                 }
             );
             mBackButton.setOnLongClickListener(
-                    new ImageButton.OnLongClickListener() {
+                    new KeyButtonView.OnLongClickListener() {
+	                @Override
                         public boolean onLongClick(View v) {
                           if (mShowBack == 1) {
                              Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -889,7 +829,7 @@ public class NavigationBarView extends LinearLayout {
 			     quickAction.setAnimStyle(QuickAction.ANIM_REFLECT);
                              return true;
                           } else if (mShowBack == 7) {
-                             simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                             CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
                              return true;
                           } else {
                              return false;
@@ -897,32 +837,29 @@ public class NavigationBarView extends LinearLayout {
                         }
                     }
                 );
-            mSearchButton = (ImageButton) findViewById(R.id.search);
-            mSearchButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mSearchButton = (KeyButtonView) findViewById(R.id.search);
+            mSearchButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                       if (mShowSearch == 1) {
                         if (DEBUG) Slog.i(TAG, "Home clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_HOME);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 4) {
                         if (DEBUG) Slog.i(TAG, "Menu clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_MENU);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 2) {
                         if (DEBUG) Slog.i(TAG, "Back clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_BACK);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 3) {
                         if (DEBUG) Slog.i(TAG, "Search clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 5) {
                         if (DEBUG) Slog.i(TAG, "Quick clicked");
@@ -932,7 +869,6 @@ public class NavigationBarView extends LinearLayout {
                            mShowVol = true;
                         }
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 6) {
                             boolean mCustomSearchAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
@@ -943,26 +879,24 @@ public class NavigationBarView extends LinearLayout {
                                     Settings.System.USE_CUSTOM_NAVISEARCH_APP_ACTIVITY));
                             }
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 7) {
                         if (DEBUG) Slog.i(TAG, "Power clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_POWER);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_POWER);
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       } else if (mShowSearch == 8) {
                         if (DEBUG) Slog.i(TAG, "Recent clicked");
                         runTaskSwitcher();
                         updateNaviButtons();
-                        mSearchButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetSearch, 80);
                       }
                     }
                 }
             );
             mSearchButton.setOnLongClickListener(
-                    new ImageButton.OnLongClickListener() {
+                    new KeyButtonView.OnLongClickListener() {
+	                @Override
                         public boolean onLongClick(View v) {
                           if (mShowSearch == 1) {
                              Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -987,7 +921,7 @@ public class NavigationBarView extends LinearLayout {
 			     quickAction.setAnimStyle(QuickAction.ANIM_REFLECT);
                              return true;
                           } else if (mShowSearch == 7) {
-                             simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                             CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
                              return true;
                           } else {
                              return false;
@@ -995,52 +929,49 @@ public class NavigationBarView extends LinearLayout {
                         }
                     }
                 );
-            mVolUpButton = (ImageButton) findViewById(R.id.volup);
-            mVolUpButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mVolUpButton = (KeyButtonView) findViewById(R.id.volup);
+            mVolUpButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                         if (DEBUG) Slog.i(TAG, "VolUp clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_VOLUME_UP);
-                        mVolUpButton.setImageBitmap(mTouchIcon);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_VOLUME_UP);
                         mHandler.postDelayed(mResetVolUp, 80);
                     }
                 }
             );
-            mVolDownButton = (ImageButton)findViewById(R.id.voldown);
-            mVolDownButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mVolDownButton = (KeyButtonView)findViewById(R.id.voldown);
+            mVolDownButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                         if (DEBUG) Slog.i(TAG, "VolDown clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_VOLUME_DOWN);
-                        mVolDownButton.setImageBitmap(mTouchIcon);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_VOLUME_DOWN);
                         mHandler.postDelayed(mResetVolDown, 80);
                     }
                 }
             );
-            mQuickButton = (ImageButton) findViewById(R.id.quicker);
-            mQuickButton.setOnClickListener(new ImageButton.OnClickListener() {
+            mQuickButton = (KeyButtonView) findViewById(R.id.quicker);
+            mQuickButton.setOnClickListener(new KeyButtonView.OnClickListener() {
+	            @Override
                     public void onClick(View v) {
                       if (mShowQuicker == 0) {
                         if (DEBUG) Slog.i(TAG, "Home clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_HOME);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 3) {
                         if (DEBUG) Slog.i(TAG, "Menu clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_MENU);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 1) {
                         if (DEBUG) Slog.i(TAG, "Back clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_BACK);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 2) {
                         if (DEBUG) Slog.i(TAG, "Search clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 4) {
                         if (DEBUG) Slog.i(TAG, "Quick clicked");
@@ -1050,7 +981,6 @@ public class NavigationBarView extends LinearLayout {
                            mShowVol = true;
                         }
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 5) {
                             boolean mCustomQuickerAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
@@ -1061,26 +991,24 @@ public class NavigationBarView extends LinearLayout {
                                     Settings.System.USE_CUSTOM_QUICK_APP_ACTIVITY));
                             }
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 6) {
                         if (DEBUG) Slog.i(TAG, "Power clicked");
-                        simulateKeypress(KeyEvent.KEYCODE_POWER);
+                        CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_POWER);
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       } else if (mShowQuicker == 7) {
                         if (DEBUG) Slog.i(TAG, "Recent clicked");
                         runTaskSwitcher();
                         updateNaviButtons();
-                        mQuickButton.setImageBitmap(mTouchIcon);
                         mHandler.postDelayed(mResetQuick, 80);
                       }
                     }
                 }
             );
             mQuickButton.setOnLongClickListener(
-                    new ImageButton.OnLongClickListener() {
+                    new KeyButtonView.OnLongClickListener() {
+	                @Override
                         public boolean onLongClick(View v) {
                           if (mShowQuicker == 0) {
                              Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -1105,7 +1033,7 @@ public class NavigationBarView extends LinearLayout {
 			     quickAction.setAnimStyle(QuickAction.ANIM_REFLECT);
                              return true;
                           } else if (mShowQuicker == 6) {
-                             simulateKeypress(KEYCODE_VIRTUAL_POWER_LONG);
+                             CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_POWER_LONG);
                              return true;
                           } else {
                              return false;
@@ -1127,7 +1055,7 @@ public class NavigationBarView extends LinearLayout {
         super.onAttachedToWindow();
     }
 
-    private boolean isEventInButton(final ImageButton button, final MotionEvent event) {
+    private boolean isEventInButton(final KeyButtonView button, final MotionEvent event) {
         return mNVShow && button != null
             && button.getLeft() <= event.getRawX()
             && button.getRight() >= event.getRawX()
@@ -1599,16 +1527,6 @@ public class NavigationBarView extends LinearLayout {
         mVolDownButton.setVisibility(View.VISIBLE);
         mQuickButton.setVisibility(View.VISIBLE);
 
-        if (mOverColorEnable) {
-           mHomeButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mMenuButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mBackButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mSearchButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mVolUpButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mVolDownButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-           mQuickButton.setColorFilter(mOverColor, Mode.MULTIPLY);
-        }
-
         if (mVisible && mShowNV) {
            mNaviBackground.setVisibility(View.VISIBLE);
         }
@@ -1645,24 +1563,6 @@ public class NavigationBarView extends LinearLayout {
         if (!mShowVol) {
             mVolUpButton.setVisibility(View.GONE);
             mVolDownButton.setVisibility(View.GONE);
-        }
-
-        if (!mOverColorEnable) {
-            mHomeButton.clearColorFilter();
-            mMenuButton.clearColorFilter();
-            mBackButton.clearColorFilter();
-            mSearchButton.clearColorFilter();
-            mQuickButton.clearColorFilter();
-        } else {
-          if (mShowHome == 6) mHomeButton.clearColorFilter();
-
-          if (mShowMenu == 6) mMenuButton.clearColorFilter();
-
-          if (mShowBack == 6) mBackButton.clearColorFilter();
-
-          if (mShowSearch == 6) mSearchButton.clearColorFilter();
-
-          if (mShowQuicker == 5) mQuickButton.clearColorFilter();
         }
 
         if ((mShowAnimate == 0) || (mShowAnimate == 1)) {
@@ -1831,11 +1731,6 @@ public class NavigationBarView extends LinearLayout {
         mVolDownIconNorm = asIcon;
     }
 
-    private void runIconTouch() {
-        Bitmap asIcon = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.navibar_touch);
-        mTouchIcon = asIcon;
-    }
-
     private void runIconRecentRot(int Degrs) {
         Bitmap asIcon = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.ic_sysbar_recent);
         int w = asIcon.getWidth();
@@ -1943,9 +1838,6 @@ public class NavigationBarView extends LinearLayout {
             } else if (mShowHome == 5) {
                mHomeButton.setImageBitmap(mQuickIcon);
             } else if (mShowHome == 6) {
-              if (mOverColorEnable) {
-                 mHomeButton.clearColorFilter();
-              }
                boolean mCustomHomeAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
                         Settings.System.USE_CUSTOM_HOME_APP_TOGGLE, 0) == 1);
 
@@ -1982,9 +1874,6 @@ public class NavigationBarView extends LinearLayout {
             } else if (mShowBack == 5) {
                mBackButton.setImageBitmap(mQuickIcon);
             } else if (mShowBack == 6) {
-              if (mOverColorEnable) {
-                 mBackButton.clearColorFilter();
-              }
                boolean mCustomBackAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
                         Settings.System.USE_CUSTOM_BACK_APP_TOGGLE, 0) == 1);
 
@@ -2021,9 +1910,6 @@ public class NavigationBarView extends LinearLayout {
             } else if (mShowSearch == 5) {
                mSearchButton.setImageBitmap(mQuickIcon);
             } else if (mShowSearch == 6) {
-              if (mOverColorEnable) {
-                 mSearchButton.clearColorFilter();
-              }
                boolean mCustomSearchAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
                         Settings.System.USE_CUSTOM_NAVISEARCH_APP_TOGGLE, 0) == 1);
 
@@ -2060,9 +1946,6 @@ public class NavigationBarView extends LinearLayout {
             } else if (mShowMenu == 5) {
                mMenuButton.setImageBitmap(mQuickIcon);
             } else if (mShowMenu == 6) {
-              if (mOverColorEnable) {
-                 mMenuButton.clearColorFilter();
-              }
                boolean mCustomMenuAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
                         Settings.System.USE_CUSTOM_MENU_APP_TOGGLE, 0) == 1);
 
@@ -2099,9 +1982,6 @@ public class NavigationBarView extends LinearLayout {
             } else if (mShowQuicker == 4) {
                mQuickButton.setImageBitmap(mQuickIcon);
             } else if (mShowQuicker == 5) {
-              if (mOverColorEnable) {
-                 mQuickButton.clearColorFilter();
-              }
                boolean mCustomQuickerAppToggle = (Settings.System.getInt(getContext().getContentResolver(),
                         Settings.System.USE_CUSTOM_QUICK_APP_TOGGLE, 0) == 1);
 
@@ -2142,41 +2022,11 @@ public class NavigationBarView extends LinearLayout {
 
     private void startCollapseActivity() {
       if (mPrevious == 1) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.collapse();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.animateCollapse();
       } else if (mPrevious == 0) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.expand();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.animateExpand();
       } else if (mPrevious == 2) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.toggleQwikWidgets();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.toggleQwikWidgets();
       } else {
          // nothing
       }
@@ -2184,84 +2034,13 @@ public class NavigationBarView extends LinearLayout {
 
     private void startExpandActivity() {
       if (mNext == 0) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.expand();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.animateExpand();
       } else if (mNext == 1) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.collapse();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.animateCollapse();
       } else if (mNext == 2) {
-        mHandler.post(new Runnable() { public void run() {
-            try {
-                 IStatusBarService statusbar = getStatusBarService();
-                 if (statusbar != null) {
-                     statusbar.toggleQwikWidgets();
-                 }
-            } catch (RemoteException ex) {
-                 // re-acquire status bar service next time it is needed.
-                 mStatusBarService = null;
-            }
-        }});
+          mServices.toggleQwikWidgets();
       } else {
          // nothing
       }
-    }
-
-    IStatusBarService getStatusBarService() {
-        if (mStatusBarService == null) {
-            mStatusBarService = IStatusBarService.Stub.asInterface(
-                    ServiceManager.getService("statusbar"));
-        }
-        return mStatusBarService;
-    }
-
-    /**
-     * Runnable to hold simulate a keypress.
-     *
-     * This is executed in a separate Thread to avoid blocking
-     */
-    private void simulateKeypress(final int keyCode) {
-        new Thread(new KeyEventInjector( keyCode ) ).start();
-    }
-
-    private class KeyEventInjector implements Runnable {
-        private int keyCode;
-
-        KeyEventInjector(final int keyCode) {
-            this.keyCode = keyCode;
-        }
-
-        public void run() {
-            try {
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode), true) ) {
-                                   Slog.w(TAG, "Key down event not injected");
-                                   return;
-                              }
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode), true) ) {
-                                  Slog.w(TAG, "Key up event not injected");
-                             }
-           } catch (RemoteException ex) {
-               Slog.w(TAG, "Error injecting key event", ex);
-           }
-        }
     }
 }

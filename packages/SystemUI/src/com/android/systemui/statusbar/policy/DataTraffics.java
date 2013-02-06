@@ -49,9 +49,9 @@ public class DataTraffics extends TextView {
     private long gOldMrx;
     private DecimalFormat mDecimalFormater;
 
-    Handler mHandler;
+    private Handler mHandler;
 
-    class SettingsObserver extends ContentObserver {
+    private class SettingsObserver extends ContentObserver {
         SettingsObserver(Handler handler) {
             super(handler);
         }
@@ -184,7 +184,7 @@ public class DataTraffics extends TextView {
     private final void updateDataTraffics() {
         long txBytes = gMtx - gOldMtx;
         long rxBytes = gMrx - gOldMrx;
-        setText("Rx: "+getDatas(rxBytes)+" Tx: "+getDatas(txBytes));
+        setText("Tx: "+getDatas(rxBytes)+" Rx: "+getDatas(txBytes));
         setTextColor(mCarrierColor);
     }
 

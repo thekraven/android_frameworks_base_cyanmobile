@@ -17,9 +17,11 @@
 package com.android.systemui.statusbar;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
@@ -51,6 +53,9 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.PieControl.OnNavButtonPressedListener;
 
+import java.util.List;
+import java.net.URISyntaxException;
+
 public class PieControlPanel extends FrameLayout implements OnNavButtonPressedListener{
 
     private static final boolean DEBUG = false;
@@ -59,18 +64,18 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     private Handler mHandler;
     boolean mShowing;
     private PieControl mPieControl;
-    private int mInjectKeycode;
-    private long mDownTime;
     private Context mContext;
     private int mOrientation;
     private int mWidth;
     private int mHeight;
     private View mTrigger;
-    Display mDisplay;
-    DisplayMetrics mDisplayMetrics = new DisplayMetrics();
+    private Display mDisplay;
+    private DisplayMetrics mDisplayMetrics = new DisplayMetrics();
 
-    ViewGroup mContentFrame;
-    Rect mContentArea = new Rect();
+    private StatusBarService mService;
+
+    private ViewGroup mContentFrame;
+    private Rect mContentArea = new Rect();
 
     public PieControlPanel(Context context) {
         this(context, null);
@@ -118,12 +123,17 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         show(false);
     }
 
-    public void init(Handler h, View trigger, int orientation) {
+    public void init(Handler h, StatusBarService mServices, View trigger, int orientation) {
         mHandler = h;
+        mService = (StatusBarService) mServices;
         mTrigger = trigger;
         mOrientation = orientation;
         setCenter();
         mPieControl.init();
+    }
+
+    public StatusBarService getBar() {
+        return mService;
     }
 
     public NotificationData setNotifications(NotificationData list) {
@@ -131,6 +141,12 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
             mPieControl.setNotifications(list);
         }
         return list;
+    }
+
+    public void setNotifNew(boolean notifnew) {
+        if (mPieControl != null) {
+            mPieControl.setNotifNew(notifnew);
+        }
     }
 
     public void reorient(int orientation) {
@@ -215,15 +231,41 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     @Override
     public void onNavButtonPressed(String buttonName) {
         if (buttonName.equals(PieControl.BACK_BUTTON)) {
-            simulateKeypress(KeyEvent.KEYCODE_BACK);
+            CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_BACK);
         } else if (buttonName.equals(PieControl.HOME_BUTTON)) {
-            simulateKeypress(KeyEvent.KEYCODE_HOME);
+            CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_HOME);
         } else if (buttonName.equals(PieControl.MENU_BUTTON)) {
-            simulateKeypress(KeyEvent.KEYCODE_MENU);
+            CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_MENU);
         } else if (buttonName.equals(PieControl.RECENT_BUTTON)) {
             toggleRecentApps();
         } else if (buttonName.equals(PieControl.SEARCH_BUTTON)) {
-            simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+            CmStatusBarView.simulateKeypress(KeyEvent.KEYCODE_SEARCH);
+        } else if (buttonName.equals(PieControl.SCREEN_BUTTON)) {
+            toggleScreenshot();
+        } else if (buttonName.equals(PieControl.POWER_BUTTON)) {
+            togglePowerMenu();
+        } else if (buttonName.equals(PieControl.LASTAPP_BUTTON)) {
+            toggleLastApp();
+        } else if (buttonName.equals(PieControl.SETTING_BUTTON)) {
+            toggleSettingsApps();
+        } else if (buttonName.equals(PieControl.CLEARALL_BUTTON)) {
+            mService.toggleClearNotif();
+        } else if (buttonName.equals(PieControl.FAKE_BUTTON)) {
+            // do nothing
+        } else {
+            runCustomApp(buttonName);
+        }
+    }
+
+    private void runCustomApp(String uri) {
+        if (uri != null) {
+            try {
+                Intent i = Intent.parseUri(uri, 0);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+                mContext.startActivity(i);
+            } catch (URISyntaxException e) {
+            } catch (ActivityNotFoundException e) {
+            }
         }
     }
 
@@ -234,36 +276,47 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mContext.startActivity(intentx);
     }
 
-    /**
-     * Runnable to hold simulate a keypress.
-     *
-     * This is executed in a separate Thread to avoid blocking
-     */
-    private void simulateKeypress(final int keyCode) {
-        new Thread(new KeyEventInjector( keyCode ) ).start();
+    private void toggleSettingsApps() {
+        Intent intenty = new Intent(android.provider.Settings.ACTION_SETTINGS);
+        intenty.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        mContext.startActivity(intenty);
     }
 
-    private class KeyEventInjector implements Runnable {
-        private int keyCode;
+    private void togglePowerMenu() {
+        Intent intentw = new Intent(Intent.ACTION_POWERMENU);
+        mContext.sendBroadcast(intentw);
+    }
 
-        KeyEventInjector(final int keyCode) {
-            this.keyCode = keyCode;
+    private void toggleScreenshot() {
+        Intent intentz = new Intent("android.intent.action.SCREENSHOT");
+        mContext.sendBroadcast(intentz);
+    }
+
+    private void toggleLastApp() {
+        int lastAppId = 0;
+        int looper = 1;
+        String packageName;
+        final Intent intent = new Intent(Intent.ACTION_MAIN);
+        final ActivityManager am = (ActivityManager) mContext
+                .getSystemService(Activity.ACTIVITY_SERVICE);
+        String defaultHomePackage = "com.android.launcher";
+        intent.addCategory(Intent.CATEGORY_HOME);
+        final ResolveInfo res = mContext.getPackageManager().resolveActivity(intent, 0);
+        if (res.activityInfo != null && !res.activityInfo.packageName.equals("android")) {
+            defaultHomePackage = res.activityInfo.packageName;
         }
-
-        public void run() {
-            try {
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode), true) ) {
-                                   Slog.w(TAG, "Key down event not injected");
-                                   return;
-                              }
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode), true) ) {
-                                  Slog.w(TAG, "Key up event not injected");
-                             }
-           } catch (RemoteException ex) {
-               Slog.w(TAG, "Error injecting key event", ex);
-           }
+        List <ActivityManager.RunningTaskInfo> tasks = am.getRunningTasks(5);
+        // lets get enough tasks to find something to switch to
+        // Note, we'll only get as many as the system currently has - up to 5
+        while ((lastAppId == 0) && (looper < tasks.size())) {
+            packageName = tasks.get(looper).topActivity.getPackageName();
+            if (!packageName.equals(defaultHomePackage) && !packageName.equals("com.android.systemui")) {
+                lastAppId = tasks.get(looper).id;
+            }
+            looper++;
+        }
+        if (lastAppId != 0) {
+            am.moveTaskToFront(lastAppId, am.MOVE_TASK_NO_USER_ACTION);
         }
     }
 }

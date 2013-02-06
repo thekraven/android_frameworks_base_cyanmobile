@@ -14,7 +14,7 @@
  * the License.
  */
 
-package com.android.systemui.statusbar.view;
+package com.android.systemui.statusbar.pies;
 
 import android.database.ContentObserver;
 import android.content.Context;
@@ -51,6 +51,7 @@ public class PieItem {
     private String mName;
     private Path mPath;
     private boolean mIsLesser;
+    private boolean mIsAppEnable;
 
     private int mLastButtonColor;
 
@@ -96,6 +97,11 @@ public class PieItem {
         mItems.add(item);
     }
 
+    public void resetItem() {
+        if (mItems != null) {
+            mItems = null;
+        }
+    }
 
     public void setName(String name) {
         mName = name;
@@ -129,6 +135,10 @@ public class PieItem {
 
     public void setEnabled(boolean enabled) {
         mEnabled = enabled;
+    }
+
+    public void setAppEnabled(boolean appEnabled) {
+        mIsAppEnable = appEnabled;
     }
 
     public void setSelected(boolean s) {
@@ -182,6 +192,7 @@ public class PieItem {
     }
 
     public void setColor(int color) {
+        if (mIsAppEnable) return;
         ImageView imageView = ((ImageView) mView);
         Drawable drawable = imageView.getDrawable();
         drawable.setColorFilter(color, Mode.SRC_ATOP);

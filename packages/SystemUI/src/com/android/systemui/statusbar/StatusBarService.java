@@ -41,6 +41,7 @@ import com.android.systemui.statusbar.clocks.ClockExpand;
 import com.android.systemui.statusbar.cmcustom.BackLogo;
 import com.android.systemui.statusbar.dates.DateView;
 import com.android.systemui.statusbar.dates.ExDateView;
+import com.android.systemui.statusbar.navbar.NavigationBarView;
 import com.android.systemui.statusbar.popups.BrightnessPanel;
 import com.android.systemui.statusbar.popups.QuickSettingsPopupWindow;
 import com.android.systemui.statusbar.popups.ShortcutPopupWindow;
@@ -144,9 +145,9 @@ import java.util.HashMap;
 import java.util.Set;
 
 public class StatusBarService extends Service implements CommandQueue.Callbacks {
-    static final String TAG = "StatusBarService";
-    static final boolean SPEW_ICONS = false;
-    static final boolean SPEW = false;
+    public static final String TAG = "StatusBarService";
+    private static final boolean SPEW_ICONS = false;
+    private static final boolean SPEW = false;
 
     public static final String ACTION_STATUSBAR_START
             = "com.android.internal.policy.statusbar.START";
@@ -159,8 +160,6 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private static final int BRIGHTNESS_CONTROL_LONG_PRESS_TIMEOUT = 750; // ms
     private static final int BRIGHTNESS_CONTROL_LINGER_THRESHOLD = 20;
     private boolean mBrightnessControl;
-
-    public static final int KEYCODE_VIRTUAL_BACK_LONG=KeyEvent.getMaxKeyCode()+2;
 
     private static final int MSG_ANIMATE = 1000;
     private static final int MSG_ANIMATE_REVEAL = 1001;
@@ -178,11 +177,11 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     // will likely move to a resource or other tunable param at some point
     private static final int INTRUDER_ALERT_DECAY_MS = 3000;
 
-    StatusBarPolicy mIconPolicy;
-    NetworkController mNetworkPolicy;
-    PiePolicy mPiePolicy;
-    CommandQueue mCommandQueue;
-    IStatusBarService mBarService;
+    private StatusBarPolicy mIconPolicy;
+    private NetworkController mNetworkPolicy;
+    private PiePolicy mPiePolicy;
+    private CommandQueue mCommandQueue;
+    private IStatusBarService mBarService;
 
     /**
      * Shallow container for {@link #mStatusBarView} which is added to the
@@ -190,114 +189,114 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
      * that the original status_bar layout can be reinflated into this container
      * on skin change.
      */
-    FrameLayout mStatusBarContainer;
+    private FrameLayout mStatusBarContainer;
 
-    int mIconSize;
-    Display mDisplay;
-    CmStatusBarView mStatusBarView;
-    int mPixelFormat;
-    H mHandler = new H();
-    Object mQueueLock = new Object();
+    private int mIconSize;
+    private Display mDisplay;
+    private CmStatusBarView mStatusBarView;
+    private int mPixelFormat;
+    private H mHandler = new H();
+    private Object mQueueLock = new Object();
 
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
-    CustomTheme mCurrentTheme;
+    private CustomTheme mCurrentTheme;
     private DoNotDisturb mDoNotDisturb;
 
     // icons
-    LinearLayout mIcons;
-    LinearLayout mCenterClock;
-    LinearLayout mCenterClockex;
-    SignalClusterView mCenterIconex;
-    LinearLayout mLeftClock;
-    IconMerger mNotificationIcons;
-    LinearLayout mStatusIcons;
-    ImageView mSettingsIconButton;
+    private LinearLayout mIcons;
+    private LinearLayout mCenterClock;
+    private LinearLayout mCenterClockex;
+    private SignalClusterView mCenterIconex;
+    private LinearLayout mLeftClock;
+    private IconMerger mNotificationIcons;
+    private LinearLayout mStatusIcons;
+    private ImageView mSettingsIconButton;
 
     // expanded notifications
-    Dialog mExpandedDialog;
-    ExpandedView mExpandedView;
-    WindowManager.LayoutParams mExpandedParams;
-    ScrollView mScrollView;
-    ScrollView mBottomScrollView;
-    LinearLayout mNotificationLinearLayout;
-    LinearLayout mBottomNotificationLinearLayout;
-    View mExpandedContents;
-    View mExpandededContents;
+    private Dialog mExpandedDialog;
+    private ExpandedView mExpandedView;
+    private WindowManager.LayoutParams mExpandedParams;
+    private ScrollView mScrollView;
+    private ScrollView mBottomScrollView;
+    private LinearLayout mNotificationLinearLayout;
+    private LinearLayout mBottomNotificationLinearLayout;
+    private View mExpandedContents;
+    private View mExpandededContents;
     // top bar
-    TextView mNoNotificationsTitle;
-    TextView mNoNotificationsTitles;
-    ImageView mClearButton;
-    TextView mClearOldButton;
-    TextView mCompactClearButton;
-    CmBatteryMiniIcon mCmBatteryMiniIcon;
+    private TextView mNoNotificationsTitle;
+    private TextView mNoNotificationsTitles;
+    private ImageView mClearButton;
+    private TextView mClearOldButton;
+    private TextView mCompactClearButton;
+    private CmBatteryMiniIcon mCmBatteryMiniIcon;
     // drag bar
-    CloseDragHandle mCloseView;
+    private CloseDragHandle mCloseView;
     // ongoing
-    NotificationData mOngoing = new NotificationData();
-    TextView mOngoingTitle;
-    LinearLayout mOngoingItems;
+    private NotificationData mOngoing = new NotificationData();
+    private TextView mOngoingTitle;
+    private LinearLayout mOngoingItems;
     // latest
-    NotificationData mLatest = new NotificationData();
-    NotificationData mNotifData = new NotificationData();
-    TextView mLatestTitle;
-    TextView mLatestTitles;
-    LinearLayout mLatestItems;
-    QuickSettingsController mQS;
-    QuickSettingsContainerView mQuickContainer;
-    ItemTouchDispatcher mTouchDispatcher;
+    private NotificationData mLatest = new NotificationData();
+    private NotificationData mNotifData = new NotificationData();
+    private TextView mLatestTitle;
+    private TextView mLatestTitles;
+    private LinearLayout mLatestItems;
+    private QuickSettingsController mQS;
+    private QuickSettingsContainerView mQuickContainer;
+    private ItemTouchDispatcher mTouchDispatcher;
     // position
-    int[] mPositionTmp = new int[2];
-    boolean mExpanded;
-    boolean mExpandedVisible;
+    private int[] mPositionTmp = new int[2];
+    public boolean mExpanded;
+    private boolean mExpandedVisible;
 
     // Pie controls
     public PieControlPanel mPieControlPanel;
     public View mPieControlsTrigger;
     public View mContainer;
-    int mIndex;
+    private int mIndex;
 
     // the date view
-    DateView mDateView;
+    private DateView mDateView;
 
     // on-screen navigation buttons
     private NavigationBarView mNavigationBarView;
     
     // the tracker view
-    TrackingView mTrackingView;
-    View mNotificationBackgroundView;
-    ImageView mSettingsButton;
-    WindowManager.LayoutParams mTrackingParams;
-    int mTrackingPosition; // the position of the top of the tracking view.
+    private TrackingView mTrackingView;
+    private View mNotificationBackgroundView;
+    private ImageView mSettingsButton;
+    private WindowManager.LayoutParams mTrackingParams;
+    private int mTrackingPosition; // the position of the top of the tracking view.
     private boolean mPanelSlightlyVisible;
 
     // the power widget
-    PowerWidget mPowerWidget;
-    PowerWidgetBottom mPowerWidgetBottom;
-    PowerWidgetOne mPowerWidgetOne;
-    PowerWidgetTwo mPowerWidgetTwo;
-    PowerWidgetThree mPowerWidgetThree;
-    PowerWidgetFour mPowerWidgetFour;
-    QwikWidgetsPanelView mWidgetsPanel;
-    RingPanelView mRingPanel;
+    private PowerWidget mPowerWidget;
+    private PowerWidgetBottom mPowerWidgetBottom;
+    private PowerWidgetOne mPowerWidgetOne;
+    private PowerWidgetTwo mPowerWidgetTwo;
+    private PowerWidgetThree mPowerWidgetThree;
+    private PowerWidgetFour mPowerWidgetFour;
+    private QwikWidgetsPanelView mWidgetsPanel;
+    private RingPanelView mRingPanel;
 
-    MusicControls mMusicControls;
+    private MusicControls mMusicControls;
 
     //Carrier label stuff
-    LinearLayout mCarrierLabelLayout;
-    CarrierLabelStatusBar mCarrierLabelStatusBarLayout;
-    CarrierLabelBottom mCarrierLabelBottomLayout;
-    CenterCarrierLabelStatusBar mCenterCarrierLabelStatusBarLayout;
-    LeftCarrierLabelStatusBar mLeftCarrierLabelStatusBarLayout;
-    CarrierLogo mCarrierLogoLayout;
-    CenterCarrierLogo mCarrierLogoCenterLayout;
-    LeftCarrierLogo mCarrierLogoLeftLayout;
-    BackLogo mBackLogoLayout;
-    CmBatteryStatusBar mCmBatteryStatusBar;
-    LinearLayout mCompactCarrierLayout;
-    LinearLayout mPowerAndCarrier;
-    FrameLayout mNaviBarContainer;
-    CarrierLabelExp mCarrierLabelExpLayout;
+    private LinearLayout mCarrierLabelLayout;
+    private CarrierLabelStatusBar mCarrierLabelStatusBarLayout;
+    private CarrierLabelBottom mCarrierLabelBottomLayout;
+    private CenterCarrierLabelStatusBar mCenterCarrierLabelStatusBarLayout;
+    private LeftCarrierLabelStatusBar mLeftCarrierLabelStatusBarLayout;
+    private CarrierLogo mCarrierLogoLayout;
+    private CenterCarrierLogo mCarrierLogoCenterLayout;
+    private LeftCarrierLogo mCarrierLogoLeftLayout;
+    private BackLogo mBackLogoLayout;
+    private CmBatteryStatusBar mCmBatteryStatusBar;
+    private LinearLayout mCompactCarrierLayout;
+    private LinearLayout mPowerAndCarrier;
+    private FrameLayout mNaviBarContainer;
+    private CarrierLabelExp mCarrierLabelExpLayout;
 
     // ticker
     private Ticker mTicker;
@@ -314,60 +313,60 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private BrightnessPanel mBrightnessPanel = null;
 
     // notification color default variables
-    int mBlackColor = 0xFF000000;
-    int mWhiteColor = 0xFFFFFFFF;
+    private int mBlackColor = 0xFF000000;
+    private int mWhiteColor = 0xFFFFFFFF;
 
     // notfication color temp variables
-    int mItemText = mBlackColor;
-    int mItemTime;
-    int mItemTitle;
-    int mDateColor;
-    int mButtonText = mBlackColor;
-    int mNotifyNone;
-    int mNotifyTicker;
-    int mNotifyLatest;
-    int mNotifyOngoing;
-    int mSettingsColor;
-    int IntruderTime;
+    private int mItemText = mBlackColor;
+    private int mItemTime;
+    private int mItemTitle;
+    private int mDateColor;
+    private int mButtonText = mBlackColor;
+    private int mNotifyNone;
+    private int mNotifyTicker;
+    private int mNotifyLatest;
+    private int mNotifyOngoing;
+    private int mSettingsColor;
+    private int IntruderTime;
 
-    LinearLayout mAvalMemLayout;
-    TextView memHeader;
-    ProgressBar avalMemPB;
-    double totalMemory;
-    double availableMemory;
+    private LinearLayout mAvalMemLayout;
+    private TextView memHeader;
+    private ProgressBar avalMemPB;
+    private double totalMemory;
+    private double availableMemory;
 
     // Tracking finger for opening/closing.
-    int mEdgeBorder; // corresponds to R.dimen.status_bar_edge_ignore
-    boolean mTracking;
-    VelocityTracker mVelocityTracker;
+    private int mEdgeBorder; // corresponds to R.dimen.status_bar_edge_ignore
+    private boolean mTracking;
+    private VelocityTracker mVelocityTracker;
 
-    static final int ANIM_FRAME_DURATION = (1000/60);
+    private static final int ANIM_FRAME_DURATION = (1000/60);
 
-    boolean mAnimating;
-    long mCurAnimationTime;
-    float mAnimY;
-    float mAnimVel;
-    float mAnimAccel;
-    long mAnimLastTime;
-    boolean mAnimatingReveal = false;
-    int mViewDelta;
-    int[] mAbsPos = new int[2];
+    private boolean mAnimating;
+    private long mCurAnimationTime;
+    private float mAnimY;
+    private float mAnimVel;
+    private float mAnimAccel;
+    private long mAnimLastTime;
+    private boolean mAnimatingReveal = false;
+    private int mViewDelta;
+    private int[] mAbsPos = new int[2];
 
     // for disabling the status bar
-    int mDisabled = 0;
+    private int mDisabled = 0;
 
     // tracking for the last visible power widget id so hide toggle works properly
-    int mLastPowerToggle = 1;
+    private int mLastPowerToggle = 1;
 
     // weather or not to show status bar on bottom
-    boolean mBottomBar;
-    boolean mButtonsLeft;
+    private boolean mBottomBar;
+    private boolean mButtonsLeft;
 
-    boolean mDeadZone;
-    boolean mHasSoftButtons;
-    boolean autoBrightness = false;
+    private boolean mDeadZone;
+    private boolean mHasSoftButtons;
+    private boolean autoBrightness = false;
     private boolean shouldTick = false;
-    Context mContext;
+    private Context mContext;
     private int mStatusBarCarrier;
     private int mStatusBarCarrierLogo;
     private int mStatusBarClock;
@@ -375,6 +374,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private boolean mShowNotif = false;
     private boolean mFirstis = true;
     private boolean mNaviShow = true;
+    private boolean mPieEnable = true;
     private boolean mStatusBarReverse = false;
     private boolean mStatusBarTab = false;
     private boolean mStatusBarGrid = false;
@@ -387,11 +387,11 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     private boolean mShowIconex = true;
     private boolean NotifEnable = true;
 
-    DisplayMetrics mDisplayMetrics = new DisplayMetrics();
+    private DisplayMetrics mDisplayMetrics = new DisplayMetrics();
 
     // tracks changes to settings, so status bar is moved to top/bottom
     // as soon as cmparts setting is changed
-    class SettingsObserver extends ContentObserver {
+    private class SettingsObserver extends ContentObserver {
         SettingsObserver(Handler handler) {
             super(handler);
         }
@@ -488,6 +488,10 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                     Settings.System.getUriFor(Settings.System.QUICK_SETTINGS_TILES), false, this);
             resolver.registerContentObserver(
                     Settings.System.getUriFor(Settings.System.PIE_GRAVITY), false, this);
+            resolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.PIE_TRIGGER), false, this);
+            resolver.registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.PIE_CONTROL_ENABLE), false, this);
             onChange(true);
         }
 
@@ -529,6 +533,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             mBrightnessControl = !autoBrightness && Settings.System.getInt(resolver,
                     Settings.System.STATUS_BAR_BRIGHTNESS_TOGGLE, 0) == 1;
             IntruderTime = Settings.System.getInt(resolver, Settings.System.STATUS_BAR_INTRUDER_TIME, INTRUDER_ALERT_DECAY_MS);
+            mPieEnable = (Settings.System.getInt(resolver, Settings.System.PIE_CONTROL_ENABLE, 1) == 1);
             updateColors();
             updateLayout();
             updateCarrierLabel();
@@ -538,9 +543,9 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     }
 
     // for brightness control on status bar
-    int mLinger;
-    int mInitialTouchX;
-    int mInitialTouchY;
+    private int mLinger;
+    private int mInitialTouchX;
+    private int mInitialTouchY;
 
     private class ExpandedDialog extends Dialog {
         ExpandedDialog(Context context) {
@@ -719,6 +724,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         mBrightnessControl = !autoBrightness && Settings.System.getInt(getContentResolver(),
                             Settings.System.STATUS_BAR_BRIGHTNESS_TOGGLE, 0) == 1;
         IntruderTime = Settings.System.getInt(getContentResolver(), Settings.System.STATUS_BAR_INTRUDER_TIME, INTRUDER_ALERT_DECAY_MS);
+        mPieEnable = (Settings.System.getInt(getContentResolver(), Settings.System.PIE_CONTROL_ENABLE, 1) == 1);
 
         if (!mStatusBarTab) {
             mExpandedView = (ExpandedView)View.inflate(context, R.layout.status_bar_expanded, null);
@@ -740,12 +746,14 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         mIntruderAlertView.setClickable(true);
 
         mNavigationBarView = (NavigationBarView)View.inflate(context, R.layout.navigation_bar, null);
+        mNavigationBarView.mServices = this;
         mNaviBarContainer = (FrameLayout) mNavigationBarView.findViewById(R.id.navibarBackground);
 
         mWidgetsPanel = (QwikWidgetsPanelView) View.inflate(context, R.layout.qwik_widgets_panel, null);
         mWidgetsPanel.setVisibility(View.GONE);
 
         mRingPanel = (RingPanelView) View.inflate(context, R.layout.ring_widget_panel, null);
+        mRingPanel.mService = this;
         mRingPanel.setOnTouchListener(mRingPanelListener);
         mRingPanel.setVisibility(View.GONE);
 
@@ -919,7 +927,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         if (mStatusBarTab) {
             mQuickContainer = (QuickSettingsContainerView) mExpandedView.findViewById(R.id.quick_settings_container);
             if (mQuickContainer != null) {
-                mQS = new QuickSettingsController(context, mQuickContainer);
+                mQS = new QuickSettingsController(context, mQuickContainer, this);
             }
         }
 
@@ -1438,7 +1446,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
     }
 
     private boolean showPie() {
-        return !mNaviShow;
+        return !mNaviShow && mPieEnable;
     }
 
     private void attachPies() {
@@ -1482,7 +1490,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         pieControlsTrigger.setOnTouchListener(new PieControlsTouchListener());
         WindowManagerImpl.getDefault().addView(pieControlsTrigger, getPieTriggerLayoutParams(mContext, gravity));
 
-        panel.init(mHandler, pieControlsTrigger, gravity);
+        panel.init(mHandler, this, pieControlsTrigger, gravity);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1501,11 +1509,13 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
     public static WindowManager.LayoutParams getPieTriggerLayoutParams(Context context, int gravity) {
         final Resources res = context.getResources();
+        final float mPieSize = Settings.System.getFloat(context.getContentResolver(),
+                Settings.System.PIE_TRIGGER, 1f);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
               (gravity == Gravity.TOP || gravity == Gravity.BOTTOM ?
-                    ViewGroup.LayoutParams.MATCH_PARENT : res.getDimensionPixelSize(R.dimen.pie_trigger_height)),
+                    ViewGroup.LayoutParams.MATCH_PARENT : (int)(res.getDimensionPixelSize(R.dimen.pie_trigger_height)*mPieSize)),
               (gravity == Gravity.LEFT || gravity == Gravity.RIGHT ?
-                    ViewGroup.LayoutParams.MATCH_PARENT : res.getDimensionPixelSize(R.dimen.pie_trigger_height)),
+                    ViewGroup.LayoutParams.MATCH_PARENT : (int)(res.getDimensionPixelSize(R.dimen.pie_trigger_height)*mPieSize)),
               WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
                     0
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -1685,6 +1695,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             }
             oldList = mLatest;
         }
+        setNotifNew(true);
         mNotifData = getNotifications(oldList);
         final NotificationData.Entry oldEntry = oldList.getEntryAt(oldIndex);
         final StatusBarNotification oldNotification = oldEntry.notification;
@@ -1882,6 +1893,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         // Add the icon.
         final int iconIndex = chooseIconIndex(isOngoing, viewIndex);
         mNotificationIcons.addView(iconView, iconIndex);
+        setNotifNew(true);
         mNotifData = getNotifications(list);
         return iconView;
     }
@@ -1902,6 +1914,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
         if (entry.cancelled) {
             if (!mOngoing.hasClearableItems() && !mLatest.hasClearableItems()) {
+                setNotifNew(false);
                 animateCollapse();
             }
         }
@@ -1914,6 +1927,12 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             mPieControlPanel.setNotifications(list);
         }
         return list;
+    }
+
+    public void setNotifNew(boolean notifnew) {
+        if (mPieControlPanel != null) {
+            mPieControlPanel.setNotifNew(notifnew);
+        }
     }
 
     private void setAreThereNotifications() {
@@ -1934,10 +1953,12 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
                     mClearOldButton.setVisibility(View.VISIBLE);
                 }
             }
+            setNotifNew(true);
         } else {
             mCompactClearButton.setVisibility(View.GONE);
             mClearButton.setVisibility(View.INVISIBLE);
             mClearOldButton.setVisibility(View.GONE);
+            setNotifNew(false);
         }
 
         mOngoingTitle.setVisibility(ongoing ? View.VISIBLE : View.GONE);
@@ -1949,7 +1970,6 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         if (latest) {
             if (mStatusBarTab) {
                 mNoNotificationsTitles.setVisibility(View.GONE);
-                togglePower();
             }
         } else {
             if (mStatusBarTab) {
@@ -2108,7 +2128,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
         mExpandedView.requestFocus(View.FOCUS_FORWARD);
         mTrackingView.setVisibility(View.VISIBLE);
         mExpandedView.setVisibility(View.VISIBLE);
-        mCarrierLabelExpLayout.setVisibility(getDataStates(mContext) ? View.GONE : View.VISIBLE);
+        mCarrierLabelExpLayout.setVisibility(getDataStates(mContext) ? View.VISIBLE : View.GONE);
 
         if (!mTicking) {
             setDateViewVisibility(true, com.android.internal.R.anim.fade_in);
@@ -3098,11 +3118,20 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
          }
     };
 
+    public void toggleClearNotif() {
+        try {
+            mBarService.onClearAllNotifications();
+        } catch (RemoteException ex) {
+           // system process is dead if we're here.
+        }
+    }
+    
     private View.OnClickListener mClearButtonListener = new View.OnClickListener() {
         public void onClick(View v) {
             mClearButton.clearColorFilter();
             try {
                 mBarService.onClearAllNotifications();
+                setNotifNew(false);
             } catch (RemoteException ex) {
                 // system process is dead if we're here.
             }
@@ -3154,7 +3183,7 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
 
     private View.OnClickListener mAvalMemLayoutListener = new View.OnClickListener() {
         public void onClick(View v) {
-            simulateKeypress(KEYCODE_VIRTUAL_BACK_LONG);
+            CmStatusBarView.simulateKeypress(CmStatusBarView.KEYCODE_VIRTUAL_BACK_LONG);
             getMemInfo();
         }
     };
@@ -3493,37 +3522,4 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
             vibrate();
         }
     };
-
-    /**
-     * Runnable to hold simulate a keypress.
-     *
-     * This is executed in a separate Thread to avoid blocking
-     */
-    private void simulateKeypress(final int keyCode) {
-        new Thread(new KeyEventInjector( keyCode ) ).start();
-    }
-
-    private class KeyEventInjector implements Runnable {
-        private int keyCode;
-
-        KeyEventInjector(final int keyCode) {
-            this.keyCode = keyCode;
-        }
-
-        public void run() {
-            try {
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode), true) ) {
-                                   Slog.w(TAG, "Key down event not injected");
-                                   return;
-                              }
-                if (!(IWindowManager.Stub.asInterface(ServiceManager.getService("window")))
-                         .injectKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode), true) ) {
-                                  Slog.w(TAG, "Key up event not injected");
-                             }
-           } catch (RemoteException ex) {
-               Slog.w(TAG, "Error injecting key event", ex);
-           }
-        }
-    }
 }
