@@ -56,6 +56,7 @@ import com.android.systemui.statusbar.powerwidget.MusicControls;
 import com.android.systemui.statusbar.qwidgets.QwikWidgetsPanelView;
 import com.android.systemui.statusbar.quicksettings.QuickSettingsContainerView;
 import com.android.systemui.statusbar.quicksettings.QuickSettingsController;
+import com.android.systemui.statusbar.quicksettings.Tile3dFlipAnimation;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.PiePolicy;
 import com.android.systemui.statusbar.policy.StatusBarPolicy;
@@ -126,6 +127,7 @@ import android.view.WindowManager;
 import android.view.WindowManagerImpl;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.view.animation.AccelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -3229,14 +3231,14 @@ public class StatusBarService extends Service implements CommandQueue.Callbacks 
           LinearLayout parent = (LinearLayout)mButtonsToggle.getParent();
           parent.setBackgroundResource(R.drawable.title_bar_portrait);
           mNotifications.setVisibility(View.VISIBLE);
-          mNotifications.startAnimation(loadAnim(com.android.internal.R.anim.slide_in_right, null));
-          mPowerCarrier.setVisibility(View.GONE);
+          mNotifications.startAnimation(loadAnim(com.android.internal.R.anim.slide_in_right, null));	
+          mPowerCarrier.setVisibility(View.GONE);	
           mPowerCarrier.startAnimation(loadAnim(com.android.internal.R.anim.slide_out_right, null));
           updateExpandedViewPos(EXPANDED_FULL_OPEN);
           NotifEnable = false;
     }
 
-    static Bitmap getNinePatch(int id,int x, int y, Context context){
+    private static Bitmap getNinePatch(int id,int x, int y, Context context){
         Bitmap bitmap = BitmapFactory.decodeResource(context.getResources(), id);
 
         byte[] chunk = bitmap.getNinePatchChunk();
